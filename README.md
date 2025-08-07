@@ -67,7 +67,7 @@ mkdir -p data/images
 ### GUI 앱 실행
 
 ```bash
-python gui_app.py
+python search_gui_app.py
 ```
 
 1. 애플리케이션이 시작되면 자동으로 임베딩 데이터베이스를 생성합니다
@@ -78,13 +78,13 @@ python gui_app.py
 
 ```bash
 # 기본 실행
-python main_cli.py --query path/to/image.jpg
+python search_main_cli.py --query path/to/image.jpg
 
 # 데이터베이스 강제 재생성
-python main_cli.py --query path/to/image.jpg --rebuild
+python search_main_cli.py --query path/to/image.jpg --rebuild
 
 # 상위 K개 결과 출력 (최대 10개)
-python main_cli.py --query path/to/image.jpg --top-k 5
+python search_main_cli.py --query path/to/image.jpg --top-k 5
 ```
 
 ## 5. 설정 옵션
@@ -132,7 +132,7 @@ MAX_TOP_K = 10
 ```bash
 # GUI에서: 애플리케이션을 재시작하면 자동으로 새 이미지 감지
 # CLI에서: --rebuild 옵션 사용
-python main_cli.py --query test.jpg --rebuild
+python search_main_cli.py --query test.jpg --rebuild
 ```
 
 ### 모델 변경
