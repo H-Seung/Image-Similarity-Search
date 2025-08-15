@@ -33,8 +33,8 @@ Parts_checker/
 
 ### 1. 필수 요구사항
 
-- Python 3.8+
-- CUDA 12.1+ (GPU 사용 시)
+- Python 3.10
+- CUDA 12.1 (GPU 사용 시)
 
 ### 2. 패키지 설치
 
