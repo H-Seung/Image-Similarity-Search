@@ -12,6 +12,7 @@ numpy==1.26.4
 scikit-learn==1.7.1
 matplotlib==3.10.3
 tqdm==4.67.1
+opencv-python==4.10.0.84
 
 # CLIP 종속성
 ftfy==6.3.1
