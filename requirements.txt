@@ -9,7 +9,7 @@ git+https://github.com/openai/CLIP.git
 # 이미지 처리 및 과학 연산
 Pillow==11.0.0
 numpy==1.26.4
-scikit-learn==1.7.0
+scikit-learn==1.7.1
 matplotlib==3.10.3
 tqdm==4.67.1
 
@@ -21,4 +21,4 @@ regex==2024.11.6
 tkinterdnd2==0.4.3
 
 # 기타 유틸리티
-python-dateutil==2.9.0
+python-dateutil==2.9.0.post0
