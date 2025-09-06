@@ -1,7 +1,7 @@
 from PIL import Image
 import torchvision.transforms as transforms
 from models.anomaly_detector_encoder import load_model, compute_anomaly_score
-from preprocess_img import get_transform
+from load_image import load_image
 import torch
 import matplotlib.pyplot as plt
 from torchvision.transforms import ToPILImage
@@ -44,26 +44,6 @@ def show_images(original_tensor, preprocessed_tensor, reconstructed_tensor, cate
 
     plt.tight_layout()
     plt.show()
-
-# Load image with preprocessing
-def load_image(image_path, category):
-    # 1) PIL 이미지 로드
-    pil_img = Image.open(image_path).convert('RGB')
-
-    # 2) 기본 및 카테고리별 전처리 정의
-    base_transform = [
-        transforms.Resize((128, 128)),
-        transforms.ToTensor()
-    ]
-    preprocess = [
-        *get_transform(category).transforms
-    ]
-
-    # 3) tensor 및 변환 적용
-    tensor_original = transforms.Compose(base_transform)(pil_img).unsqueeze(0) # (1, C, H, W) 형태
-    tensor_preprocessed = transforms.Compose(base_transform + preprocess)(pil_img).unsqueeze(0)
-
-    return tensor_original, tensor_preprocessed
 
 
 if __name__ == '__main__':

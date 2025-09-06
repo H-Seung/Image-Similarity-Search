@@ -28,7 +28,7 @@ class AutoEncoder(nn.Module):
         return x
 
 def load_model(category):
-    model_path = f"models/autoencoder_{category}.pth"
+    model_path = f"models/autoencoder_{category}_prep.pth"
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model {model_path} not found")
     model = AutoEncoder()

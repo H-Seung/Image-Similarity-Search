@@ -1,3 +1,4 @@
+import os
 from torchvision import transforms
 import cv2
 import numpy as np
@@ -19,11 +20,9 @@ def apply_clahe(pil_img: Image.Image) -> Image.Image:
     return Image.fromarray(rgb)
 
 def get_transform(category: str):
-
     if category == 'cable':
         """cable : Clahe, 조명·대비, 정규화 """
         steps = [
-            transforms.Resize((128, 128)),
             transforms.Lambda(apply_clahe),
             transforms.ColorJitter(brightness=0.1, contrast=0.15),
             transforms.ToTensor(),
@@ -37,3 +36,43 @@ def get_transform(category: str):
         ]
     return transforms.Compose(steps)
 
+
+# get_transform을 이용해 전처리 이미지를 만들고 저장하는 코드 (위치 정리 필요)
+def save_tensor_as_image(tensor, save_path):
+    """Tensor(C,H,W) → PIL 이미지로 변환 후 저장"""
+    to_pil = transforms.ToPILImage()
+    img = to_pil(tensor.cpu())
+    img.save(save_path)
+
+def process_images(input_dir, output_dir, category):
+    os.makedirs(output_dir, exist_ok=True)
+    transform = get_transform(category)
+
+    count = 0
+    for fname in os.listdir(input_dir):
+        if not fname.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff')):
+            continue
+
+        img_path = os.path.join(input_dir, fname)
+        pil_img = Image.open(img_path).convert('RGB')
+
+        # get_transform 적용
+        tensor_preprocessed = transform(pil_img)
+
+        # 전처리 저장
+        save_tensor_as_image(
+            tensor_preprocessed,
+            os.path.join(output_dir, f"{os.path.splitext(fname)[0]}_prep.png"))
+
+        count += 1
+
+    print(f"✅ 총 {count}개 이미지 처리 완료 → {output_dir}")
+
+
+if __name__ == '__main__':
+    category = "cable"
+    process_images(
+        f"data/{category}/train/good",
+        f"data_processed/{category}/train",
+        category=category
+    )

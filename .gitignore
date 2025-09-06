@@ -2,12 +2,5 @@ __pycache__/
 .idea
 dd
 .venv
-/data/cable.tar.xz
-/data/metal_nut.tar.xz
-/data/screw.tar.xz
-/data/cable
-/data/metal_nut
-/data/screw
-/data/images
-/data/embeddings_db.pkl
 /data
+/data_processed
