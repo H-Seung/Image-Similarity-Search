@@ -13,7 +13,7 @@ IMAGE_DIR = os.path.join(DATA_DIR, "images")
 DB_PATH = os.path.join(DATA_DIR, "embeddings_db.pkl")
 
 # 검색 설정
-DEFAULT_TOP_K = 5
+DEFAULT_TOP_K = 2
 MAX_TOP_K = 10
 
 # 이미지 설정

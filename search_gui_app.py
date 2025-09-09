@@ -10,6 +10,15 @@ from models.embedder import Embedder
 from utils.search import search_similar
 from config import *
 
+# 이상치 탐지
+import torchvision.transforms as transforms
+from models.anomaly_detector_encoder import load_model, compute_anomaly_score
+from load_image import load_image
+from anomaly_main import run_anomaly_inference
+import matplotlib.pyplot as plt
+from torchvision.transforms import ToPILImage
+
+
 
 class ImageSearchApp(tkdnd.TkinterDnD.Tk):
     def __init__(self):
@@ -193,6 +202,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
 
         return db
 
+    # 이상치 판단 추론과 결과를 넣기 위해 코드 수정
     def handle_drop(self, event):
         """파일 드롭 처리"""
         if not self.embedder or not self.db:
@@ -222,8 +232,12 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             query_vec = self.embedder.get_embedding(filepath)
             results = search_similar(query_vec, self.db, top_k=DEFAULT_TOP_K)
 
-            # 결과 표시
-            self.show_results(results)
+            # 이상치 탐지
+            # 결과에서 이미지의 파일명만 가져오기
+            filename_no_ext = os.path.splitext(results[0][0])[0]
+            results_anomaly = run_anomaly_inference(filepath, filename_no_ext)
+
+            self.show_results(results, anomaly_score=results_anomaly[0], anomaly_status=results_anomaly[1])
 
             self.info_label.config(text=f"✅ 검색 완료! (DB: {len(self.db)}개 이미지)", fg="green")
 
@@ -233,6 +247,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             self.info_label.config(text="❌ 검색 실패", fg="red")
             if LOG_ERRORS:
                 print(f"❌ 드롭 처리 오류: {e}")
+
 
     def show_query_image(self, filepath):
         """쿼리 이미지 표시"""
@@ -256,7 +271,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             if LOG_ERRORS:
                 print(f"⚠️ 쿼리 이미지 표시 오류: {e}")
 
-    def show_results(self, results):
+    def show_results(self, results, anomaly_score=None, anomaly_status=None):
         """검색 결과 표시"""
         # 기존 결과 제거
         for widget in self.scrollable_frame.winfo_children():
@@ -267,6 +282,21 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                                        font=("Arial", 12), fg="gray")
             no_result_label.pack(pady=20)
             return
+
+        # 🔹 이상치 결과를 크게 표시하는 영역 (결과 최상단)
+        if anomaly_score is not None or anomaly_status is not None:
+            text = ""
+            if anomaly_score is not None:
+                text += f"이상치 점수: {anomaly_score:.3f}   "
+            if anomaly_status is not None:
+                text += f"상태: {anomaly_status}"
+            big_label = tk.Label(
+                self.scrollable_frame,
+                text=text,
+                font=("Arial", 15, "bold"),  # 🔹 크게 강조
+                fg="red" if (anomaly_status and "anom" in anomaly_status.lower()) else "green"
+            )
+            big_label.pack(pady=(0, 20))
 
         # 결과를 가로로 배치
         result_frame = tk.Frame(self.scrollable_frame)

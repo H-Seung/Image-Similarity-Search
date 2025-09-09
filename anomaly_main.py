@@ -45,6 +45,26 @@ def show_images(original_tensor, preprocessed_tensor, reconstructed_tensor, cate
     plt.tight_layout()
     plt.show()
 
+def run_anomaly_inference(filepath, filename_no_ext):
+    img_path = filepath
+    category = filename_no_ext
+    threshold = 0.004
+
+    model = load_model(category)
+    tensor_original, tensor_preprocessed = load_image(img_path, category)
+    loss, output = compute_anomaly_score(model, tensor_original)
+    results_anomaly = None
+
+    if loss > threshold :
+        results_anomaly = "Anomaly"
+    else:
+        results_anomaly = "Normal"
+
+    print(f"[{category}] 이미지: {img_path}")
+    print(f"Anomaly Score: {loss:.6f}")
+    print("Status:", "Anomaly" if loss > threshold else "Normal")  # Threshold 조절 가능
+
+    return loss, results_anomaly
 
 if __name__ == '__main__':
     # 사용자 설정
