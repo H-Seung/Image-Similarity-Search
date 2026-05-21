@@ -48,9 +48,10 @@ def show_images(original_tensor, preprocessed_tensor, reconstructed_tensor, cate
 
 if __name__ == '__main__':
     # 사용자 설정
-    img_path = "data/cable/test/poke_insulation/002.png"
+    # img_path = "data/cable/test/poke_insulation/005.png"
+    img_path = "data/cable/test/good/008.png"
     category = "cable"
-    threshold = 0.004
+    threshold = 0.001499
 
     model = load_model(category)
     tensor_original, tensor_preprocessed = load_image(img_path, category)

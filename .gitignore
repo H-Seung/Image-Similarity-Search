@@ -4,3 +4,4 @@ dd
 .venv
 /data
 /data_processed
+*.xlsx
