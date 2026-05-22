@@ -45,9 +45,9 @@ def show_images(original_tensor, preprocessed_tensor, reconstructed_tensor, cate
     plt.tight_layout()
     plt.show()
 
-def run_anomaly_inference(filepath, filename_no_ext):
+def run_anomaly_inference(filepath, category):
     img_path = filepath
-    category = filename_no_ext
+    category = category
     threshold = 0.004
 
     model = load_model(category)
@@ -68,9 +68,10 @@ def run_anomaly_inference(filepath, filename_no_ext):
 
 if __name__ == '__main__':
     # 사용자 설정
-    img_path = "data/cable/test/poke_insulation/002.png"
+    # img_path = "data/cable/test/poke_insulation/005.png"
+    img_path = "data/cable/test/good/008.png"
     category = "cable"
-    threshold = 0.004
+    threshold = 0.001499
 
     model = load_model(category)
     tensor_original, tensor_preprocessed = load_image(img_path, category)
