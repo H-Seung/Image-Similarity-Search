@@ -3,7 +3,7 @@ import torch
 import os
 
 # 모델 설정
-MODEL_NAME = "clip"  # "clip" 또는 "resnet"
+MODEL_NAME = "clip"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # 경로 설정
@@ -19,10 +19,10 @@ MAX_TOP_K = 10
 # 이미지 설정
 SUPPORTED_FORMATS = ('.jpg', '.jpeg', '.png', '.jfif', '.bmp', '.tiff', '.webp')
 THUMBNAIL_SIZE = (224, 224)
-DISPLAY_SIZE = (150, 150)
+DISPLAY_SIZE = (140, 140)
 
 # GUI 설정
-WINDOW_SIZE = "900x700"
+WINDOW_SIZE = "900x750"
 CANVAS_SIZE = (224, 224)
 
 # 성능 설정

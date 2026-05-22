@@ -1,7 +1,8 @@
 # 이미지 유사도 검색기 (Image Similarity Search)
 
 OpenAI CLIP 또는 ResNet-50 모델을 기반으로 한 이미지 유사도 검색기입니다. </br>
-Drag & Drop 방식 GUI 또는 CLI 인터페이스를 통해 유사한 이미지를 빠르게 검색할 수 있습니다.
+Drag & Drop 방식 GUI 를 통해 유사한 이미지를 빠르게 검색할 수 있습니다.
+![result](assets/result_similarity.png)
 
 ## 1. 주요 기능
 
@@ -16,14 +17,13 @@ Drag & Drop 방식 GUI 또는 CLI 인터페이스를 통해 유사한 이미지�
 ```
 Parts_checker/
 ├── data/
-│   ├── images/              # 검색 대상 이미지 폴더
-│   └── embeddings_db.pkl    # 사전 계산된 임베딩 데이터베이스 (자동 생성)
+│   ├── images/              # 이미지 DB
+│   └── embeddings_db_{model_name}.pkl    # 임베딩 데이터베이스 (자동 생성)
 ├── models/
 │   └── embedder.py          # 이미지 임베딩 추출기
 ├── utils/
 │   └── search.py            # 유사도 검색 함수
-├── gui_app.py               # GUI 기반 검색 앱
-├── main_cli.py              # CLI 기반 검색 도구 (선택사항)
+├── search_gui_app.py        # GUI 기반 검색 앱
 ├── config.py                # 설정 파일
 ├── requirements.txt         # 의존성 패키지 목록
 └── README.md
@@ -53,9 +53,9 @@ pip install torch torchvision
 pip install -r requirements.txt
 ```
 
-### 3. 이미지 데이터 준비
+### 3. 이미지 DB 준비
 
-`data/images/` 폴더에 검색하고 싶은 이미지들을 넣어주세요:
+`data/images/` 폴더에 DB로 쓸 이미지를 넣어주세요:
 
 ```bash
 mkdir -p data/images
@@ -74,18 +74,6 @@ python search_gui_app.py
 2. 검색할 이미지를 드래그 앤 드롭하세요
 3. 상위 k개(default=5, config.py에서 변경 가능)의 유사한 이미지가 표시됩니다
 
-### CLI 도구 실행 (선택사항)
-
-```bash
-# 기본 실행
-python search_main_cli.py --query path/to/image.jpg
-
-# 데이터베이스 강제 재생성
-python search_main_cli.py --query path/to/image.jpg --rebuild
-
-# 상위 K개 결과 출력 (최대 10개)
-python search_main_cli.py --query path/to/image.jpg --top-k 5
-```
 
 ## 5. 설정 옵션
 
@@ -128,15 +116,11 @@ MAX_TOP_K = 10
 ## 7. 업그레이드 및 유지보수
 
 ### 데이터베이스 재생성
-새로운 이미지를 추가한 후:
-```bash
-# GUI에서: 애플리케이션을 재시작하면 자동으로 새 이미지 감지
-# CLI에서: --rebuild 옵션 사용
-python search_main_cli.py --query test.jpg --rebuild
-```
+gui 앱에서 우측 상단 'DB 재생성' 버튼 클릭
 
 ### 모델 변경
-다른 모델을 사용하려면 `config.py`에서 `MODEL_NAME`을 변경:
+다른 모델을 사용하려면 `config.py`에서 `MODEL_NAME`을 변경하거나,</br>
+gui 앱에서 우측 상단 '모델 재설정' 버튼 클릭:
 - `"clip"`: OpenAI CLIP 
 - `"resnet"`: ResNet-50
 
