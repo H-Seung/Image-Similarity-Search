@@ -6,18 +6,10 @@ from PIL import Image, ImageTk
 import tkinterdnd2 as tkdnd
 import torch
 
+from config import *
 from models.embedder import Embedder
 from utils.search import search_similar
-from config import *
-
-# 이상치 탐지
-import torchvision.transforms as transforms
-from models.anomaly_detector_encoder import load_model, compute_anomaly_score
-from load_image import load_image
-from anomaly_main import run_anomaly_inference
-import matplotlib.pyplot as plt
-from torchvision.transforms import ToPILImage
-
+from models.anomaly_detector_encoder import run_anomaly_inference
 
 
 class ImageSearchApp(tkdnd.TkinterDnD.Tk):
