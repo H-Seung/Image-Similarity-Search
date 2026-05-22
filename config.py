@@ -1,4 +1,4 @@
-# config.py - 향상된 설정 파일
+# config.py
 import torch
 import os
 

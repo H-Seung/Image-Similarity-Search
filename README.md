@@ -55,7 +55,8 @@ pip install -r requirements.txt
 
 ### 3. 이미지 DB 준비
 
-`data/images/` 폴더에 DB로 쓸 이미지를 넣어주세요:
+`data/images/` 폴더에 DB로 쓸 이미지를 넣어주세요
+- 이미지 파일명은 `카테고리명_일련번호.png` 형태여야 합니다.(예: cable_001.png, grid_000.png)
 
 ```bash
 mkdir -p data/images

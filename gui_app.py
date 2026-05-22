@@ -6,29 +6,46 @@ from PIL import Image, ImageTk
 import tkinterdnd2 as tkdnd
 import torch
 
+from config import *
 from models.embedder import Embedder
 from utils.search import search_similar
-from config import *
+from models.anomaly_detector_encoder import run_anomaly_inference
 
 
 class ImageSearchApp(tkdnd.TkinterDnD.Tk):
     def __init__(self):
         super().__init__()
-        self.title("이미지 유사도 검색기")
+        self.title("Vision Intelligence Platform")
         self.geometry(WINDOW_SIZE)
         self.resizable(True, True)
 
-        # 메인 프레임
-        main_frame = tk.Frame(self)
+        # 1. 메인 탭 위젯(Notebook) 생성
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        # 2. 각 기능을 위한 독립적인 프레임(탭) 생성
+        self.tab_similarity = tk.Frame(self.notebook)
+        self.tab_anomaly = tk.Frame(self.notebook)
+
+        self.notebook.add(self.tab_similarity, text=" 유사이미지 검색 ")
+        self.notebook.add(self.tab_anomaly, text=" 이상 탐지 ")
+
+        # UI 설정 코드를 각 탭 프레임 내부로 배치
+        self.setup_similarity_ui(self.tab_similarity)
+        self.setup_anomaly_ui(self.tab_anomaly)
+        
+    def setup_similarity_ui(self, parent):    
+        # 1. 메인 프레임을 부모 탭(parent) 내부에 생성
+        main_frame = tk.Frame(parent)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # 1. 드래그앤드롭 안내 (문구 수정, 검정 글씨, 가운데 정렬)
+        # 2. 드래그앤드롭 안내 
         self.label = tk.Label(main_frame, 
                               text="검색하려는 이미지를 드래그 앤 드롭하면,\nDB 내 이미지에서 유사한 이미지를 검색합니다.",
                               font=("Arial", 12), fg="black", justify=tk.CENTER)
         self.label.pack(pady=10)
         
-        # 2. 상단 정보 및 제어 영역 프레임 (3분할 grid 구조)
+        # 3. 상단 정보 및 제어 영역 프레임 (3분할 grid 구조)
         info_frame = tk.Frame(main_frame)
         info_frame.pack(fill=tk.X, pady=(0, 11))
 
@@ -37,9 +54,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         info_frame.columnconfigure(1, weight=1, uniform="top_info")  # 가운데 구역
         info_frame.columnconfigure(2, weight=1, uniform="top_info")  # 오른쪽 구역
 
-        # ----------------------------------------
         # [왼쪽 구역] DB 개수 및 현재 모델 정보 
-        # ----------------------------------------
         left_info_subframe = tk.Frame(info_frame)
         left_info_subframe.grid(row=0, column=0, sticky="w", padx=10)
 
@@ -52,9 +67,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                                          font=("Arial", 11), fg="black")
         self.model_info_label.pack(anchor="w", pady=(2, 0))
 
-        # ----------------------------------------
-        # [가운데 구역] 상태 알려주는 문구
-        # ----------------------------------------
+        # [가운데 구역] 상태 문구
         center_info_subframe = tk.Frame(info_frame)
         center_info_subframe.grid(row=0, column=1, sticky="nsew") 
 
@@ -62,9 +75,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         self.center_status_label = tk.Label(center_info_subframe, text="⌛ 준비 중...", font=("Arial", 12, "bold"), fg="black")
         self.center_status_label.pack(expand=True)
 
-        # ----------------------------------------
         # [오른쪽 구역] 버튼 제어 영역 
-        # ----------------------------------------
         right_btn_subframe = tk.Frame(info_frame)
         right_btn_subframe.grid(row=0, column=2, sticky="e", padx=10)
 
@@ -76,7 +87,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         self.btn_change_model = tk.Button(right_btn_subframe, text="모델 재설정", command=self.open_model_selection_popup, font=("Arial", 11), width=12)
         self.btn_change_model.pack(anchor="e")
         
-        # 쿼리(검색대상) 이미지 및 매칭 결과 2분할 표시 컨테이너 프레임
+        # 4. 쿼리(검색대상) 이미지 및 매칭 결과 2분할 표시 컨테이너 프레임
         query_match_container = tk.Frame(main_frame)
         query_match_container.pack(pady=10)
 
@@ -102,7 +113,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         self.lbl_best_name = tk.Label(best_match_frame, text="", font=("Arial", 10)) # 파일명 레이블
         self.lbl_best_name.pack(pady=2)
 
-        # 결과 영역
+        # 5. 결과 하단 스크롤 영역
         result_label_frame = tk.Frame(main_frame)
         result_label_frame.pack(fill=tk.X, pady=(16, 1))
         tk.Label(result_label_frame, text=f"유사한 이미지 (상위 {DEFAULT_TOP_K}개)",
@@ -140,6 +151,52 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             print_config()
 
         self.init_components()
+
+    def setup_anomaly_ui(self, parent):
+        # 1. 메인 프레임을 부모 탭(parent) 내부에 생성 
+        main_frame = tk.Frame(parent)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # 2. 상단 안내 문구 
+        anomaly_label = tk.Label(main_frame, 
+                                 text="분석하려는 이미지를 드래그 앤 드롭하면,\nAI 모델이 이미지의 이상(불량) 여부를 탐지합니다.",
+                                 font=("Arial", 12), fg="black", justify=tk.CENTER)
+        anomaly_label.pack(pady=10)
+
+        # 3. 드롭된 이미지를 보여줄 중앙 쿼리 이미지 영역
+        img_frame = tk.Frame(main_frame)
+        img_frame.pack(pady=10)
+
+        tk.Label(img_frame, text="분석 대상 이미지", font=("Arial", 14, "bold")).pack(pady=5)
+        self.canvas_anomaly_query = tk.Canvas(img_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
+                                              bg="white", bd=0, highlightthickness=0)
+        self.canvas_anomaly_query.pack()
+        
+        self.lbl_anomaly_query_name = tk.Label(img_frame, text="", font=("Arial", 10)) # 파일명 레이블
+        self.lbl_anomaly_query_name.pack(pady=2)
+
+        # 4. 하단 결과 표시 영역 
+        result_label_frame = tk.Frame(main_frame)
+        result_label_frame.pack(fill=tk.X, pady=(20, 3))
+        tk.Label(result_label_frame, text="이상치 분석 결과", font=("Arial", 12, "bold")).pack()
+
+        self.anomaly_canvas = tk.Canvas(main_frame, height=150)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.anomaly_canvas.yview)
+        
+        # 중요 변수명: 유사도 탭과 겹치지 않게 'self.anomaly_scrollable_frame'으로 명명
+        self.anomaly_scrollable_frame = ttk.Frame(self.anomaly_canvas)
+
+        self.anomaly_scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.anomaly_canvas.configure(scrollregion=self.anomaly_canvas.bbox("all"))
+        )
+
+        self.anomaly_canvas.create_window((0, 0), window=self.anomaly_scrollable_frame, anchor="nw")
+        self.anomaly_canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.anomaly_canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
 
     def init_components(self):
         """백그라운드에서 컴포넌트 초기화"""
@@ -400,12 +457,21 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             # 쿼리 이미지 표시
             self.show_query_image(filepath)
 
-            # 임베딩 추출 및 검색
+            # 임베딩 추출 및 유사 이미지 검색
             query_vec = self.embedder.get_embedding(filepath)
             results = search_similar(query_vec, self.db, top_k=DEFAULT_TOP_K)
 
+            # 결과에서 이미지의 파일명만 가져오기 (예: "grid_000.png" -> "grid_000")
+            filename_no_ext = os.path.splitext(results[0][0])[0]  
+            if "_" in filename_no_ext:
+                category = filename_no_ext.split("_")[0]
+            else:
+                category = filename_no_ext
+            # 이상치 탐지
+            results_anomaly = run_anomaly_inference(filepath, category)
+
             # 결과 표시
-            self.show_results(results)
+            self.show_results(results, anomaly_score=results_anomaly[0], anomaly_status=results_anomaly[1])
             self.center_status_label.config(text=f"✅ 검색 완료!", fg="green")
 
         except Exception as e:
@@ -421,25 +487,65 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             img = Image.open(filepath)
             img.thumbnail(THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
             thumb_w, thumb_h = img.size
-            self.query_imgtk = ImageTk.PhotoImage(img)
-
-            self.canvas_query.delete("all")
-            self.canvas_query.config(width=thumb_w, height=thumb_h)
-
-            cx = thumb_w // 2
-            cy = thumb_h // 2
-            self.canvas_query.create_image(cx, cy, image=self.query_imgtk, anchor=tk.CENTER)
             
-            self.lbl_query_name.config(text=os.path.basename(filepath)) # 검색 캔버스 및 파일명
+            # 현재 선택된 탭이 어디냐에 따라 이미지를 띄워주는 캔버스를 분기합니다.
+            current_tab_idx = self.notebook.index(self.notebook.select())
+            
+            if current_tab_idx == 0:  # 1번 유사도 검색 탭일 때
+                self.query_imgtk = ImageTk.PhotoImage(img)
+                self.canvas_query.delete("all")
+                self.canvas_query.config(width=thumb_w, height=thumb_h)
+                self.canvas_query.create_image(thumb_w//2, thumb_h//2, image=self.query_imgtk, anchor=tk.CENTER)
+                self.lbl_query_name.config(text=os.path.basename(filepath)) # 검색 캔버스 및 파일명
+            else:                     # 2번 이상치 탐지 탭일 때
+                self.anomaly_imgtk = ImageTk.PhotoImage(img) # 별도 이미지 변수 유지
+                self.canvas_anomaly_query.delete("all")
+                self.canvas_anomaly_query.config(width=thumb_w, height=thumb_h)
+                self.canvas_anomaly_query.create_image(thumb_w//2, thumb_h//2, image=self.anomaly_imgtk, anchor=tk.CENTER)
+                self.lbl_anomaly_query_name.config(text=os.path.basename(filepath)) # 검색 캔버스 및 파일명
 
         except Exception as e:
             if LOG_ERRORS:
                 print(f"⚠️ 쿼리 이미지 표시 오류: {e}")
 
-    def show_results(self, results):
-        """검색 결과 표시"""
-        # 기존 결과 제거
-        for widget in self.scrollable_frame.winfo_children():
+    def show_results(self, results, anomaly_score=None, anomaly_status=None):
+        """
+        통합 결과 표시 함수: 
+        전달받은 인자에 따라 현재 활성화된 탭의 UI를 업데이트
+        """
+        # 현재 선택된 탭 확인
+        current_tab_idx = self.notebook.index(self.notebook.select())
+
+        if current_tab_idx == 0:  # 유사도 검색 탭일 때
+            self.update_similarity_results(results)
+        else:  # 이상치 탐지 탭일 때
+            self.update_anomaly_results(anomaly_score, anomaly_status)
+
+    def update_anomaly_results(self, anomaly_score, anomaly_status):
+        """이상치 탐지용 label을 이상치 전용 스크롤 프레임에 출력"""
+        # 기존 이상치 결과 컴포넌트 청소
+        for widget in self.anomaly_scrollable_frame.winfo_children():
+            widget.destroy()
+
+        if anomaly_score is not None or anomaly_status is not None:
+            text = ""
+            if anomaly_score is not None:
+                text += f"이상치 점수: {anomaly_score:.3f}   "
+            if anomaly_status is not None:
+                text += f"상태: {anomaly_status}"
+
+            big_label = tk.Label(
+                self.anomaly_scrollable_frame,
+                text=text,
+                font=("Arial", 15, "bold"),  
+                fg="red" if (anomaly_status and "anom" in anomaly_status.lower()) else "green"
+            )
+            big_label.pack(pady=(20, 20))
+
+    def update_similarity_results(self, results):
+        """1순위 유사 이미지를 상단 우측 '유사 이미지' 영역에 배치"""
+        # 기존 이상치 결과 컴포넌트 청소
+        for widget in self.anomaly_scrollable_frame.winfo_children():
             widget.destroy()
 
         if not results:
@@ -450,17 +556,15 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             self.lbl_best_name.config(text="")
             return
 
-        # 1순위 유사 이미지를 상단 우측 '유사 이미지' 영역에 배치
         best_fname, best_score = results[0]
         try:
             best_path = os.path.join(IMAGE_DIR, best_fname)
             if os.path.exists(best_path):
                 best_img = Image.open(best_path)
                 best_img.thumbnail(THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
-                
                 best_w, best_h = best_img.size
+
                 self.canvas_best.config(width=best_w, height=best_h)
-                
                 self.best_imgtk = ImageTk.PhotoImage(best_img)
                 self.canvas_best.delete("all")
                 
