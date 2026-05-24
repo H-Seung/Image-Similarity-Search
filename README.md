@@ -68,7 +68,7 @@ mkdir -p data/images
 ### GUI 앱 실행
 
 ```bash
-python search_gui_app.py
+python gui_app.py
 ```
 
 1. 애플리케이션이 시작되면 자동으로 임베딩 데이터베이스를 생성합니다

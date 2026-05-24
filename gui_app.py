@@ -4,7 +4,6 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from PIL import Image, ImageTk
 import tkinterdnd2 as tkdnd
-import torch
 
 from config import *
 from models.embedder import Embedder
@@ -33,7 +32,50 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         # UI 설정 코드를 각 탭 프레임 내부로 배치
         self.setup_similarity_ui(self.tab_similarity)
         self.setup_anomaly_ui(self.tab_anomaly)
+
+        # 드래그앤드롭 : 앱 전역(self)에 드롭을 바인딩
+        self.drop_target_register(tkdnd.DND_FILES)
+        self.dnd_bind('<<Drop>>', self.handle_drop)
+
+        # 임베딩 모델 및 DB 초기화
+        self.embedder = None
+        self.db = None
+
+        # 필요한 디렉토리 생성
+        ensure_directories()
+
+        # 설정 정보 출력
+        if VERBOSE:
+            print_config()
+
+        self.init_components()
         
+    def init_components(self):
+        """백그라운드에서 컴포넌트 초기화"""
+        try:
+            self.stat_label.config(text=f"모델 로딩 중... ({MODEL_NAME.upper()} on {DEVICE})")
+            self.update()
+
+            self.embedder = Embedder(model_name=MODEL_NAME, device=DEVICE)
+
+            self.stat_label.config(text="임베딩 DB 로딩/생성 중...")
+            self.update()
+
+            self.db = self.load_db()
+
+            db_count = len(self.db) if self.db else 0
+            # 왼쪽 구역 정보 업데이트
+            self.stat_label.config(text=f"DB: {db_count}개 이미지")
+            self.model_info_label.config(text=f"현재 모델: {MODEL_NAME.upper()} ({DEVICE})")
+            # 가운데 구역 업데이트
+            self.center_status_label.config(text="✅ 준비 완료!", fg="black")
+
+        except Exception as e:
+            error_msg = f"❌ 초기화 실패: {str(e)}"
+            self.stat_label.config(text=error_msg, fg="red")
+            messagebox.showerror("초기화 오류", error_msg)
+
+
     def setup_similarity_ui(self, parent):    
         # 1. 메인 프레임을 부모 탭(parent) 내부에 생성
         main_frame = tk.Frame(parent)
@@ -89,7 +131,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         
         # 4. 쿼리(검색대상) 이미지 및 매칭 결과 2분할 표시 컨테이너 프레임
         query_match_container = tk.Frame(main_frame)
-        query_match_container.pack(pady=10)
+        query_match_container.pack(pady=7)
 
         # [왼쪽] 쿼리 이미지 표시 영역
         query_frame = tk.Frame(query_match_container, padx=20)
@@ -115,11 +157,11 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
 
         # 5. 결과 하단 스크롤 영역
         result_label_frame = tk.Frame(main_frame)
-        result_label_frame.pack(fill=tk.X, pady=(16, 1))
+        result_label_frame.pack(fill=tk.X, pady=(1, 1))
         tk.Label(result_label_frame, text=f"유사한 이미지 (상위 {DEFAULT_TOP_K}개)",
                  font=("Arial", 12, "bold")).pack()
 
-        # 스크롤 가능한 결과 프레임
+        # 스크롤 가능 결과 프레임
         self.result_canvas = tk.Canvas(main_frame, height=220)
         scrollbar = ttk.Scrollbar(main_frame, orient="horizontal", command=self.result_canvas.xview)
         self.scrollable_frame = ttk.Frame(self.result_canvas)
@@ -128,29 +170,11 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             "<Configure>",
             lambda e: self.result_canvas.configure(scrollregion=self.result_canvas.bbox("all"))
         )
-
         self.result_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.result_canvas.configure(xscrollcommand=scrollbar.set)
 
-        self.result_canvas.pack(side="top", fill="both", expand=True)
+        self.result_canvas.pack(side="top", fill=tk.BOTH, expand=True, pady=(2, 0))
         scrollbar.pack(side="top", fill="x")
-
-        # 드래그앤드롭 설정
-        self.drop_target_register(tkdnd.DND_FILES)
-        self.dnd_bind('<<Drop>>', self.handle_drop)
-
-        # 임베딩 모델 및 DB 초기화
-        self.embedder = None
-        self.db = None
-
-        # 필요한 디렉토리 생성
-        ensure_directories()
-
-        # 설정 정보 출력
-        if VERBOSE:
-            print_config()
-
-        self.init_components()
 
     def setup_anomaly_ui(self, parent):
         # 1. 메인 프레임을 부모 탭(parent) 내부에 생성 
@@ -163,88 +187,65 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                                  font=("Arial", 12), fg="black", justify=tk.CENTER)
         anomaly_label.pack(pady=10)
 
-        # 3. 드롭된 이미지를 보여줄 중앙 쿼리 이미지 영역
-        img_frame = tk.Frame(main_frame)
-        img_frame.pack(pady=10)
+        # [상단 판정 결과 구역]: 정상/불량 스탬프와 점수가 크게 표시될 공간
+        self.anomaly_result_frame = tk.Frame(main_frame)
+        self.anomaly_result_frame.pack(fill=tk.X, pady=(20, 15))
+        
+        # 초기 상태 표시 레이블
+        self.lbl_anomaly_status = tk.Label(self.anomaly_result_frame, text="⌛ 이미지 드롭 대기 중", 
+                                           font=("Arial", 14, "bold"), fg="gray")
+        self.lbl_anomaly_status.pack(side=tk.TOP, anchor="c")
 
-        tk.Label(img_frame, text="분석 대상 이미지", font=("Arial", 14, "bold")).pack(pady=5)
-        self.canvas_anomaly_query = tk.Canvas(img_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
+        # [중앙 2분할 시각화 컨테이너]
+        visual_container = tk.Frame(main_frame)
+        visual_container.pack(pady=(20, 20), expand=False)
+        
+        # 좌우 폭을 균등하게 강제 고정 (글자 길이에 밀리지 않게 조율)
+        visual_container.columnconfigure(0, weight=1, uniform="anomaly_view")
+        visual_container.columnconfigure(1, weight=1, uniform="anomaly_view")
+
+        # [좌측 칸]: 검사 대상 입력 이미지 영역
+        left_view_frame = tk.Frame(visual_container)
+        left_view_frame.grid(row=0, column=0, sticky="n", padx=(20, 80))
+
+        tk.Label(left_view_frame, text="검사 대상 이미지 (Input)", font=("Arial", 13, "bold"), fg="#333333").pack(pady=5)
+        self.canvas_anomaly_query = tk.Canvas(left_view_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
                                               bg="white", bd=0, highlightthickness=0)
         self.canvas_anomaly_query.pack()
         
-        self.lbl_anomaly_query_name = tk.Label(img_frame, text="", font=("Arial", 10)) # 파일명 레이블
+        self.lbl_anomaly_query_name = tk.Label(left_view_frame, text="", font=("Arial", 10), fg="gray")
         self.lbl_anomaly_query_name.pack(pady=2)
 
-        # 4. 하단 결과 표시 영역 
-        result_label_frame = tk.Frame(main_frame)
-        result_label_frame.pack(fill=tk.X, pady=(20, 3))
-        tk.Label(result_label_frame, text="이상치 분석 결과", font=("Arial", 12, "bold")).pack()
+        # [우측 칸]: 모델 복원 오차 집중 구역 (Heatmap)
+        right_view_frame = tk.Frame(visual_container)
+        right_view_frame.grid(row=0, column=1, sticky="n", padx=(80, 20))
 
-        self.anomaly_canvas = tk.Canvas(main_frame, height=150)
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.anomaly_canvas.yview)
+        tk.Label(right_view_frame, text="이상 부위 추적 맵 (Heatmap)", font=("Arial", 13, "bold"), fg="#333333").pack(pady=5)
+        self.canvas_anomaly_heatmap = tk.Canvas(right_view_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
+                                                bg="white", bd=0, highlightthickness=0)
+        self.canvas_anomaly_heatmap.pack()
         
-        # 중요 변수명: 유사도 탭과 겹치지 않게 'self.anomaly_scrollable_frame'으로 명명
-        self.anomaly_scrollable_frame = ttk.Frame(self.anomaly_canvas)
+        self.lbl_anomaly_heatmap_name = tk.Label(right_view_frame, text="", font=("Arial", 10), fg="gray")
+        self.lbl_anomaly_heatmap_name.pack(pady=2)
 
-        self.anomaly_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.anomaly_canvas.configure(scrollregion=self.anomaly_canvas.bbox("all"))
-        )
-
-        self.anomaly_canvas.create_window((0, 0), window=self.anomaly_scrollable_frame, anchor="nw")
-        self.anomaly_canvas.configure(yscrollcommand=scrollbar.set)
-
-        self.anomaly_canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-
-    def init_components(self):
-        """백그라운드에서 컴포넌트 초기화"""
-        try:
-            self.stat_label.config(text=f"모델 로딩 중... ({MODEL_NAME.upper()} on {DEVICE})")
-            self.update()
-
-            self.embedder = Embedder(model_name=MODEL_NAME, device=DEVICE)
-
-            self.stat_label.config(text="임베딩 DB 로딩/생성 중...")
-            self.update()
-
-            self.db = self.load_db()
-
-            db_count = len(self.db) if self.db else 0
-            # 왼쪽 구역 정보 업데이트
-            self.stat_label.config(text=f"DB: {db_count}개 이미지")
-            self.model_info_label.config(text=f"현재 모델: {MODEL_NAME.upper()} ({DEVICE})")
-            # 가운데 구역 업데이트
-            self.center_status_label.config(text="✅ 준비 완료!", fg="black")
-
-        except Exception as e:
-            error_msg = f"❌ 초기화 실패: {str(e)}"
-            self.stat_label.config(text=error_msg, fg="red")
-            messagebox.showerror("초기화 오류", error_msg)
 
     def open_model_selection_popup(self):
-        """⚙️ 모델 재설정: CLIP / ResNet을 선택할 수 있는 팝업창을 띄웁니다."""
+        """⚙️ 모델 재설정 팝업: CLIP / ResNet을 선택할 수 있는 팝업창을 띄움"""
         popup = tk.Toplevel(self)
         popup.title("모델 변경")
         popup.geometry("300x150")
         popup.resizable(False, False)
-        
-        # 팝업을 메인 창 중앙 근처에 띄우기
-        popup.grab_set() 
+        popup.grab_set() # 팝업을 메인 창 중앙 근처에 띄우기
         
         lbl = tk.Label(popup, text="변경할 모델을 선택하세요:", font=("Arial", 11, "bold"))
         lbl.pack(pady=15)
         
-        # 라디오 버튼 변수 (현재 활성화된 모델을 기본값으로 선택)
-        selected_model = tk.StringVar(value=MODEL_NAME.lower())
-        
+        selected_model = tk.StringVar(value=MODEL_NAME.lower()) # 라디오 버튼 변수 (현재 활성화된 모델을 기본값으로 선택)
         rb_frame = tk.Frame(popup)
         rb_frame.pack(pady=5)
         
         rb_clip = tk.Radiobutton(rb_frame, text="CLIP", variable=selected_model, value="clip", font=("Arial", 10))
         rb_clip.pack(side=tk.LEFT, padx=20)
-        
         rb_resnet = tk.Radiobutton(rb_frame, text="ResNet", variable=selected_model, value="resnet", font=("Arial", 10))
         rb_resnet.pack(side=tk.LEFT, padx=20)
         
@@ -263,7 +264,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         btn_confirm.pack(pady=10)
 
     def update_config_file(self, new_model_name):
-        """config.py 파일을 읽어서 MODEL_NAME 설정을 변경하고 앱을 재시작합니다."""
+        """config.py 파일을 읽어서 MODEL_NAME 설정을 변경하고 앱을 재시작"""
         config_path = "config.py"
         if not os.path.exists(config_path):
             messagebox.showerror("오류", "config.py 파일을 찾을 수 없습니다.")
@@ -282,7 +283,6 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                     lines[i] = f"MODEL_NAME = \"{new_model_name}\"\n"
                     updated = True
                     break
-
             if not updated:
                 messagebox.showerror("오류", "config.py 내에서 MODEL_NAME 변수를 찾지 못했습니다.")
                 return
@@ -294,7 +294,6 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             # 4. 앱 프로세스 자동 재시작
             import sys
             import subprocess
-            
             messagebox.showinfo("재시작", "설정이 저장되었습니다. 앱을 재시작합니다.")
             self.destroy() # 현재 tkinter 창을 완전히 닫음
             
@@ -305,6 +304,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         except Exception as e:
             messagebox.showerror("오류", f"설정 변경 중 오류가 발생했습니다:\n{e}")
     
+
     def get_current_db_path(self):
         """ DB명 처리: 현재 설정된 모델명에 맞춰 고유한 pkl 경로를 반환"""
         base, ext = os.path.splitext(DB_PATH)
@@ -317,17 +317,14 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             if VERBOSE:
                 print(f"현재 모델({MODEL_NAME})의 DB가 없어 새로 생성합니다.")
             return self.build_db()
-
         try:
             with open(current_db_path, "rb") as f:
                 db = pickle.load(f)
                 if VERBOSE:
                     print(f"✅ {MODEL_NAME}] 임베딩 DB 로드 완료 ({len(db)}개 이미지)")
-
                 # DB 데이터 무결성 검사 및 수정
                 db = self.fix_db_dimensions(db)
-                return db
-            
+                return db  
         except Exception as e:
             if LOG_ERRORS:
                 print(f"⚠️ 기존 DB 로드 실패, 새로 생성: {e}")
@@ -371,7 +368,6 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         db = {}
         image_files = [f for f in os.listdir(IMAGE_DIR)
                        if f.lower().endswith(SUPPORTED_FORMATS)]
-
         if not image_files:
             if VERBOSE:
                 print(f"❗ '{IMAGE_DIR}' 폴더에 이미지가 없습니다.")
@@ -379,7 +375,6 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
 
         if VERBOSE:
             print(f"📦 [{MODEL_NAME}] {len(image_files)}개 이미지 임베딩 생성 중...")
-
         for i, fname in enumerate(image_files):
             path = os.path.join(IMAGE_DIR, fname)
             try:
@@ -405,22 +400,19 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
 
     def rebuild_database(self):
         """데이터베이스 재구축"""
-        # DB 재생성 확인 메세지창 알림
-        if not messagebox.askyesno("확인", "현재 모델({MODEL_NAME})의 기존 pkl DB를 지우고 새로 빌드하시겠습니까?"):
+        if not messagebox.askyesno("확인", f"현재 모델({MODEL_NAME})의 기존 DB를 지우고 재구축하시겠습니까?"):
             return
         
         try:
-            self.center_status_label.config(text="🔄 [{MODEL_NAME}] 데이터베이스 재구축 중...", fg="orange")
+            self.center_status_label.config(text=f"🔄 [{MODEL_NAME}] 데이터베이스 재구축 중...", fg="orange")
             self.update()
-
             # 기존 DB 파일 삭제
             current_db_path = self.get_current_db_path()
             if os.path.exists(current_db_path):
                 os.remove(current_db_path)
-
+            
             # 새 DB 생성
             self.db = self.build_db()
-
             db_count = len(self.db) if self.db else 0
             self.stat_label.config(text=f"DB: {db_count}개 이미지")
             self.center_status_label.config(text="✅ 재구축 완료!", fg="green")
@@ -432,55 +424,82 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             if LOG_ERRORS:
                 print(f"❌ DB 재구축 오류: {e}")   
     
-    def handle_drop(self, event):
-        """파일 드롭 처리"""
-        if not self.embedder or not self.db:
-            messagebox.showerror("오류", "시스템이 아직 준비되지 않았습니다.")
-            return
 
-        # 파일 경로 정리
+    def handle_drop(self, event):
+        """파일 드롭 처리 : 드롭 이벤트를 현재 탭 위치에 따라 분기 처리"""
         filepath = event.data.strip('{}').strip('"').strip("'")
 
-        if not os.path.isfile(filepath):
-            messagebox.showerror("오류", "유효한 경로의 이미지 파일을 드롭하세요")
+        if not os.path.isfile(filepath) or not filepath.lower().endswith(SUPPORTED_FORMATS):
+            messagebox.showerror("오류", "유효한 경로 또는 형식의 이미지 파일을 드롭하세요.")
             return
 
-        # 파일 확장자 확인
-        if not filepath.lower().endswith(SUPPORTED_FORMATS):
-            messagebox.showerror("오류", f"지원하는 이미지 형식이 아닙니다\n{SUPPORTED_FORMATS}")
-            return
+        # 탭 위치 인덱스 확인 (0: 유사도 검색 탭, 1: 이상 탐지 탭)
+        current_tab_idx = self.notebook.index(self.notebook.select())
 
+        # 가동 안내 공통 업데이트
+        self.show_query_image(filepath)
+
+        # [유사도 검색 탭 활성화 시 연산]
+        if current_tab_idx == 0:
+            if not self.embedder or not self.db:
+                messagebox.showerror("오류", "유사도 모델이 로드되지 않았습니다.")
+                return
+            try:
+                self.center_status_label.config(text="🔍 유사 이미지 검색 중...", fg="orange")
+                self.update()
+                query_vec = self.embedder.get_embedding(filepath)
+                results = search_similar(query_vec, self.db, top_k=DEFAULT_TOP_K)
+
+                # 상위 탭 분기 호출 (유사도 전용 데이터 전달)
+                self.show_results(results=results)
+                self.center_status_label.config(text="✅ 검색 완료!", fg="green")
+            except Exception as e:
+                messagebox.showerror("유사도 오버랩 오류", f"검색 실패: {e}")
+
+        # [이상 탐지 탭 활성화 시 연산]
+        else:
+            try:
+                self.lbl_anomaly_status.config(text="🔍 AI 이상치 탐지 연산 중...", fg="orange")
+                self.update()
+                
+                # 카테고리 추출을 위한 가벼운 유사도 검색 (임시 카테고리 추출 연산을 UI 연동 구조 안으로 내재화)
+                temp_query_vec = self.embedder.get_embedding(filepath)
+                temp_results = search_similar(temp_query_vec, self.db, top_k=1)
+                filename_no_ext = os.path.splitext(temp_results[0][0])[0]  
+                category = filename_no_ext.split("_")[0] if "_" in filename_no_ext else filename_no_ext
+                
+                # AI 이상치 추론 엔진 구동
+                anomaly_score, anomaly_status, reconstructed_tensor = run_anomaly_inference(filepath, category)
+
+                # 상위 탭 분기 호출 (이상치 전용 데이터 전달)
+                self.show_results(results=None, anomaly_score=anomaly_score, anomaly_status=anomaly_status)
+                
+                # 우측 맵 시각화 연동
+                self.show_reconstructed_heatmap(reconstructed_tensor)
+                
+            except Exception as e:
+                messagebox.showerror("이상치 추론 오류", f"분석 실패: {e}")
+                self.lbl_anomaly_status.config(text="❌ 분석 실패", fg="red")
+
+
+    def show_reconstructed_heatmap(self, reconstructed_tensor):
+        """AutoEncoder 복원 결과를 받아 우측 Heatmap 캔버스에 드로잉"""
         try:
-            self.center_status_label.config(text="🔍 검색 중...", fg="orange")
-            self.update()
-
-            # 쿼리 이미지 표시
-            self.show_query_image(filepath)
-
-            # 임베딩 추출 및 유사 이미지 검색
-            query_vec = self.embedder.get_embedding(filepath)
-            results = search_similar(query_vec, self.db, top_k=DEFAULT_TOP_K)
-
-            # 결과에서 이미지의 파일명만 가져오기 (예: "grid_000.png" -> "grid_000")
-            filename_no_ext = os.path.splitext(results[0][0])[0]  
-            if "_" in filename_no_ext:
-                category = filename_no_ext.split("_")[0]
-            else:
-                category = filename_no_ext
-            # 이상치 탐지
-            results_anomaly = run_anomaly_inference(filepath, category)
-
-            # 결과 표시
-            self.show_results(results, anomaly_score=results_anomaly[0], anomaly_status=results_anomaly[1])
-            self.center_status_label.config(text=f"✅ 검색 완료!", fg="green")
-
+            from torchvision.transforms import ToPILImage
+            to_pil = ToPILImage() # 토치 텐서를 PIL 이미지 객체로 정제
+            recon_img = to_pil(reconstructed_tensor.squeeze(0).cpu())
+            recon_img = recon_img.resize(THUMBNAIL_SIZE, Image.Resampling.LANCZOS) # 128x128 텐서 크기를 좌측 원본과 정렬하기 위해 강제 리사이즈 (thumbnail은 이미지 축소 전용이므로, resize() 사용)
+            
+            w, h = recon_img.size
+            self.anomaly_heatmap_imgtk = ImageTk.PhotoImage(recon_img)
+            self.canvas_anomaly_heatmap.delete("all")
+            self.canvas_anomaly_heatmap.config(width=w, height=h)
+            self.canvas_anomaly_heatmap.create_image(w//2, h//2, image=self.anomaly_heatmap_imgtk, anchor=tk.CENTER)
+            self.lbl_anomaly_heatmap_name.config(text="Reconstructed Matrix")
+        
         except Exception as e:
-            error_msg = f"검색 중 오류가 발생했습니다: {str(e)}"
-            messagebox.showerror("오류", error_msg)
-            self.stat_label.config(text="❌ 검색 실패", fg="red")
-            if LOG_ERRORS:
-                print(f"❌ 드롭 처리 오류: {e}")
-
+            print(f"⚠️ 우측 Heatmap 시각화 실패: {e}")    
+    
     def show_query_image(self, filepath):
         """쿼리 이미지 표시"""
         try:
@@ -488,7 +507,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             img.thumbnail(THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
             thumb_w, thumb_h = img.size
             
-            # 현재 선택된 탭이 어디냐에 따라 이미지를 띄워주는 캔버스를 분기합니다.
+            # 현재 선택된 탭이 어디냐에 따라 이미지를 띄워주는 캔버스를 분기
             current_tab_idx = self.notebook.index(self.notebook.select())
             
             if current_tab_idx == 0:  # 1번 유사도 검색 탭일 때
@@ -497,6 +516,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                 self.canvas_query.config(width=thumb_w, height=thumb_h)
                 self.canvas_query.create_image(thumb_w//2, thumb_h//2, image=self.query_imgtk, anchor=tk.CENTER)
                 self.lbl_query_name.config(text=os.path.basename(filepath)) # 검색 캔버스 및 파일명
+            
             else:                     # 2번 이상치 탐지 탭일 때
                 self.anomaly_imgtk = ImageTk.PhotoImage(img) # 별도 이미지 변수 유지
                 self.canvas_anomaly_query.delete("all")
@@ -513,8 +533,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         통합 결과 표시 함수: 
         전달받은 인자에 따라 현재 활성화된 탭의 UI를 업데이트
         """
-        # 현재 선택된 탭 확인
-        current_tab_idx = self.notebook.index(self.notebook.select())
+        current_tab_idx = self.notebook.index(self.notebook.select()) # 현재 선택된 탭 확인
 
         if current_tab_idx == 0:  # 유사도 검색 탭일 때
             self.update_similarity_results(results)
@@ -522,32 +541,23 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             self.update_anomaly_results(anomaly_score, anomaly_status)
 
     def update_anomaly_results(self, anomaly_score, anomaly_status):
-        """이상치 탐지용 label을 이상치 전용 스크롤 프레임에 출력"""
-        # 기존 이상치 결과 컴포넌트 청소
-        for widget in self.anomaly_scrollable_frame.winfo_children():
-            widget.destroy()
+        """이상 탐지 label을 결과 구역에 출력 및 갱신 기능"""
+        if anomaly_score is None and anomaly_status is None:
+            self.lbl_anomaly_status.config(text="❌ 분석 실패 (데이터 없음)", fg="gray")
+            return
 
-        if anomaly_score is not None or anomaly_status is not None:
-            text = ""
-            if anomaly_score is not None:
-                text += f"이상치 점수: {anomaly_score:.3f}   "
-            if anomaly_status is not None:
-                text += f"상태: {anomaly_status}"
+        # 상단 스탬프 구역에 색상과 스코어를 결합
+        if anomaly_status and "anom" in anomaly_status.lower():
+            status_text = f"🚨 ANOMALY (불량)  |  Score: {anomaly_score:.5f}"
+            status_color = "red"
+        else:
+            status_text = f"🟢 NORMAL (정상)  |  Score: {anomaly_score:.5f}"
+            status_color = "green"
 
-            big_label = tk.Label(
-                self.anomaly_scrollable_frame,
-                text=text,
-                font=("Arial", 15, "bold"),  
-                fg="red" if (anomaly_status and "anom" in anomaly_status.lower()) else "green"
-            )
-            big_label.pack(pady=(20, 20))
+        # 레이블 컴포넌트 실시간 갱신
+        self.lbl_anomaly_status.config(text=status_text, fg=status_color)
 
     def update_similarity_results(self, results):
-        """1순위 유사 이미지를 상단 우측 '유사 이미지' 영역에 배치"""
-        # 기존 이상치 결과 컴포넌트 청소
-        for widget in self.anomaly_scrollable_frame.winfo_children():
-            widget.destroy()
-
         if not results:
             no_result_label = tk.Label(self.scrollable_frame, text="검색 결과가 없습니다.",
                                        font=("Arial", 12), fg="gray")
@@ -580,6 +590,10 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         except Exception as e:
             print(f"우측 베스트 결과 표시 오류: {e}")
         
+        # 하단 전체 결과 청소 후 새로 고침 고정
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
         # 하단 전체 결과 리스트 가로 배치
         result_frame = tk.Frame(self.scrollable_frame)
         result_frame.pack(fill=tk.X, padx=10, pady=10)
@@ -588,32 +602,32 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             try:
                 # 개별 결과 프레임
                 item_frame = tk.Frame(result_frame, relief=tk.RAISED, bd=1)
-                item_frame.grid(row=0, column=i, padx=10, pady=5, sticky="n")
+                item_frame.grid(row=0, column=i, padx=10, pady=2, sticky="n")
 
                 # 이미지 위에 순위 표시 (1부터 시작하므로 i + 1)
                 rank_label = tk.Label(item_frame, text=str(i + 1), font=("Arial", 12, "bold"))
                 rank_label.pack(pady=(2, 1))
 
+                # 이미지 표시
                 path = os.path.join(IMAGE_DIR, fname)
                 if os.path.exists(path):
-                    # 이미지 표시
                     img = Image.open(path)
                     img.thumbnail(DISPLAY_SIZE, Image.Resampling.LANCZOS) # 썸네일 크기 조정
                     imgtk = ImageTk.PhotoImage(img) # 썸네일로 만든 이미지를 ImageTk로 변환
 
                     panel = tk.Label(item_frame, image=imgtk)
                     panel.image = imgtk  # 참조 유지
-                    panel.pack(pady=3)
+                    panel.pack(pady=1)
                 else:
                     # DB 예외 처리: 하단 목록에서도 원본 이미지가 없으면 대체 텍스트 상자 배치
                     panel = tk.Label(item_frame, text="No Image\nFile", width=12, height=6, bg="lightgray", fg="black")
-                    panel.pack(pady=3)
+                    panel.pack(pady=1)
 
-                # 파일명 및 점수 표시
+                # 파일명 및 유사도 점수 표시
                 info_text = f"{fname}\n유사도: {score:.3f}"
                 label = tk.Label(item_frame, text=info_text, font=("Arial", 10),
                                  justify=tk.CENTER, wraplength=150)
-                label.pack(pady=3)
+                label.pack(pady=1)
 
             except Exception as e:
                 if LOG_ERRORS:
@@ -626,8 +640,7 @@ if __name__ == "__main__":
         print(f"❗ '{IMAGE_DIR}' 폴더를 생성합니다.")
         ensure_directories()
 
-    image_files = [f for f in os.listdir(IMAGE_DIR)
-                   if f.lower().endswith(SUPPORTED_FORMATS)]
+    image_files = [f for f in os.listdir(IMAGE_DIR) if f.lower().endswith(SUPPORTED_FORMATS)]
     
     base, ext = os.path.splitext(DB_PATH)
     current_model_db_path = f"{base}_{MODEL_NAME.lower()}{ext}"
