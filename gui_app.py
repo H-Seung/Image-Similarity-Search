@@ -482,23 +482,19 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                 self.lbl_anomaly_status.config(text="❌ 분석 실패", fg="red")
 
 
-    def show_reconstructed_heatmap(self, reconstructed_tensor):
-        """AutoEncoder 복원 결과를 받아 우측 Heatmap 캔버스에 드로잉"""
+    def show_reconstructed_heatmap(self, heatmap_img):
+        """에러맵 PIL Image를 우측 Heatmap 캔버스에 드로잉"""
         try:
-            from torchvision.transforms import ToPILImage
-            to_pil = ToPILImage() # 토치 텐서를 PIL 이미지 객체로 정제
-            recon_img = to_pil(reconstructed_tensor.squeeze(0).cpu())
-            recon_img = recon_img.resize(THUMBNAIL_SIZE, Image.Resampling.LANCZOS) # 128x128 텐서 크기를 좌측 원본과 정렬하기 위해 강제 리사이즈 (thumbnail은 이미지 축소 전용이므로, resize() 사용)
-            
-            w, h = recon_img.size
-            self.anomaly_heatmap_imgtk = ImageTk.PhotoImage(recon_img)
+            heatmap_img = heatmap_img.resize(THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
+            w, h = heatmap_img.size
+            self.anomaly_heatmap_imgtk = ImageTk.PhotoImage(heatmap_img)
             self.canvas_anomaly_heatmap.delete("all")
             self.canvas_anomaly_heatmap.config(width=w, height=h)
             self.canvas_anomaly_heatmap.create_image(w//2, h//2, image=self.anomaly_heatmap_imgtk, anchor=tk.CENTER)
-            self.lbl_anomaly_heatmap_name.config(text="Reconstructed Matrix")
+            self.lbl_anomaly_heatmap_name.config(text="|Input - Reconstructed| Error Map")
         
         except Exception as e:
-            print(f"⚠️ 우측 Heatmap 시각화 실패: {e}")    
+            print(f"⚠️ Heatmap 시각화 실패: {e}")    
     
     def show_query_image(self, filepath):
         """쿼리 이미지 표시"""

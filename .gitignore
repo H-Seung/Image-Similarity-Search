@@ -5,3 +5,6 @@ dd
 /data
 /data_processed
 *.xlsx
+*.pth
+.claude
+models/thresholds.json
