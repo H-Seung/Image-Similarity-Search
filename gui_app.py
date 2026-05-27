@@ -1,3 +1,6 @@
+"""
+사용법: python gui_app.py
+"""
 import os
 import pickle
 import tkinter as tk

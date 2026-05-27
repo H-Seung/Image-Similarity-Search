@@ -13,7 +13,7 @@ from torchvision import transforms
 from PIL import Image
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, roc_curve
-from models.anomaly_detector_encoder import AutoEncoder, compute_anomaly_score
+from models.anomaly_detector_encoder import AutoEncoder, compute_anomaly_score, compute_patch_anomaly_score
 
 DATA_DIR   = os.path.join(ROOT_DIR, "data")
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
@@ -59,7 +59,8 @@ def evaluate_category(category):
             try:
                 img = Image.open(path).convert('RGB')
                 tensor = transform(img).unsqueeze(0)
-                score, _ = compute_anomaly_score(model, tensor)
+                # score, _ = compute_anomaly_score(model, tensor)
+                score, _ = compute_patch_anomaly_score(model, tensor)
                 labels.append(label)
                 scores.append(score)
             except Exception as e:

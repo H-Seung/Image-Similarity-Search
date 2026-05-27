@@ -1,8 +1,8 @@
 """
-모든 카테고리의 train/good 이미지 전체에 대해 MSE 분포를 계산하고
+모든 카테고리의 train/good 이미지 전체/패치에 대해 MSE 분포를 계산하고
 카테고리별 threshold를 models/thresholds.json에 저장합니다.
 
-사용법: python calibrate_thresholds.py
+사용법: python utils/calibrate_thresholds.py
 """
 import os
 import sys                                                             
@@ -14,11 +14,11 @@ import torch
 from torchvision import transforms
 from PIL import Image
 from tqdm import tqdm
-from models.anomaly_detector_encoder import AutoEncoder, compute_anomaly_score
+from models.anomaly_detector_encoder import AutoEncoder, compute_anomaly_score, compute_patch_anomaly_score 
 
 DATA_DIR = os.path.join(ROOT_DIR, "data")
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
-THRESHOLD_JSON = os.path.join(MODELS_DIR, "thresholds.json")
+THRESHOLD_JSON = os.path.join(MODELS_DIR, "thresholds_patch.json")
 PERCENTILE = 99
 
 
@@ -58,7 +58,8 @@ def compute_train_scores(category):
         try:
             img = Image.open(path).convert('RGB')
             tensor = transform(img).unsqueeze(0)
-            score, _ = compute_anomaly_score(model, tensor)
+            # score, _ = compute_anomaly_score(model, tensor)
+            score, _ = compute_patch_anomaly_score(model, tensor)
             scores.append(score)
         except Exception as e:
             print(f"  ⚠️  {fname}: {e}")

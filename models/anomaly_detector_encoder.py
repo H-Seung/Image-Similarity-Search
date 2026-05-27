@@ -60,30 +60,55 @@ def compute_error_heatmap(input_tensor, output_tensor):
     heatmap = heatmap.filter(ImageFilter.GaussianBlur(radius=2)) # 노이즈 스무딩
     return heatmap                                               # PIL Image 반환
 
+
+_thresholds_cache = None
+
+def _load_thresholds():
+    global _thresholds_cache
+    if _thresholds_cache is not None:
+        return _thresholds_cache
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_path = os.path.join(root_dir, "config.json")
+    threshold_path = os.path.join(root_dir, "models", "thresholds_patch.json")  # fallback
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        threshold_path = os.path.join(root_dir, config.get("threshold_path", "models/thresholds_patch.json"))
+    if os.path.exists(threshold_path):
+        with open(threshold_path, "r") as f:
+            _thresholds_cache = json.load(f)
+        print("threshold 데이터를 불러옵니다 : threshold_path")
+    else:
+        _thresholds_cache = {}
+    return _thresholds_cache
+
 def load_threshold(category):                                   
-    """thresholds.json에서 카테고리별 threshold 로드"""
-    threshold_path = os.path.join(os.path.dirname(__file__), "thresholds.json")
-    if os.path.exists(threshold_path):                            
-        with open(threshold_path, "r") as f:                     
-            thresholds = json.load(f)                            
-        if category in thresholds:                               
-            return thresholds[category]["threshold"]             
-    return 0.005                                                 # calibrate 전 임시 fallback
+    """config.json에 지정된 경로에서 카테고리별 threshold 로드"""
+    thresholds = _load_thresholds()
+    return thresholds.get(category, {}).get("threshold", 0.005)
 
 def compute_anomaly_score(model, image_tensor):
-    """
-    image_tensor: shape (1, 3, 128, 128)
-    """
+    """image_tensor: shape (1, 3, 128, 128)"""
     with torch.no_grad():
         output = model(image_tensor)
         loss = F.mse_loss(output, image_tensor).item()
     return loss, output
 
+def compute_patch_anomaly_score(model, image_tensor, patch_size=16):
+    with torch.no_grad():
+        output = model(image_tensor)
+    error_map = ((image_tensor - output) ** 2).mean(dim=1, keepdim=True)  # (1,1,128,128)
+    patches = error_map.unfold(2, patch_size, patch_size).unfold(3, patch_size, patch_size) # patches.shape = (1, 1, n_h, n_w, patch_size, patch_size) = (1, 1, 8, 8, 16, 16) = 16 x 16 크기의 patch 64개 (8x8 grid)
+    patch_scores = patches.contiguous().view(1, -1, patch_size * patch_size).mean(dim=-1) # (1, 64, 256) (mean)-> (1, 64)
+    score = patch_scores.max().item()  # 가장 이상한 패치 점수
+    return score, output
+
 def run_anomaly_inference(filepath, category):
     """GUI 및 외부 영역에서 호출할 이상치 탐지 엔드포인트"""
     model = load_model(category)
     tensor_original, _ = load_and_preprocess_image(filepath, category)
-    loss, output = compute_anomaly_score(model, tensor_original)
+    # loss, output = compute_anomaly_score(model, tensor_original)
+    loss, output = compute_patch_anomaly_score(model, tensor_original)
 
     threshold = load_threshold(category)                        # 카테고리별 threshold
     results_anomaly = "Anomaly" if loss > threshold else "Normal"
