@@ -3,7 +3,10 @@
 CLIP / ResNet-50 기반 이미지 유사도 검색과 AutoEncoder 기반 비지도 이상 탐지를 통합한 GUI 애플리케이션입니다.  
 MVTec-AD 데이터셋을 기준으로 정량 평가 및 실험 분석을 수행했습니다.
 
-<img src="assets/result_similarity.png" width="60%"/>
+<div style="display: flex; gap: 10px;">
+    <img src="assets/result_similarity.png" width="40%"/>
+    <img src="assets/result_anomaly.png" width="40%"/>
+</div>
 
 ---
 
