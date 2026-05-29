@@ -9,6 +9,7 @@ import matplotlib
 matplotlib.use('Agg') # tkinter 백엔드 충돌 방지
 import matplotlib.cm as cm
 from models.anomaly_processor import load_and_preprocess_image
+from config import THRESHOLD_PATH
 
 
 class AutoEncoder(nn.Module):
@@ -67,17 +68,10 @@ def _load_thresholds():
     global _thresholds_cache
     if _thresholds_cache is not None:
         return _thresholds_cache
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    config_path = os.path.join(root_dir, "config.json")
-    threshold_path = os.path.join(root_dir, "models", "thresholds_patch.json")  # fallback
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            config = json.load(f)
-        threshold_path = os.path.join(root_dir, config.get("threshold_path", "models/thresholds_patch.json"))
-    if os.path.exists(threshold_path):
-        with open(threshold_path, "r") as f:
+    if os.path.exists(THRESHOLD_PATH):
+        with open(THRESHOLD_PATH, "r") as f:
             _thresholds_cache = json.load(f)
-        print("threshold 데이터를 불러옵니다 : threshold_path")
+        print("threshold 데이터를 불러옵니다 : {THRESHOLD_PATH}")
     else:
         _thresholds_cache = {}
     return _thresholds_cache

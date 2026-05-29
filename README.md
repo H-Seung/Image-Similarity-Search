@@ -1,49 +1,84 @@
-# 이미지 유사도 검색기 (Image Similarity Search)
+# 유사 이미지 검색 & 이상 탐지기
 
-OpenAI CLIP 또는 ResNet-50 모델을 기반으로 한 이미지 유사도 검색기입니다. </br>
-Drag & Drop 방식 GUI 를 통해 유사한 이미지를 빠르게 검색할 수 있습니다.
-![result](assets/result_similarity.png)
+CLIP / ResNet-50 기반 이미지 유사도 검색과 AutoEncoder 기반 비지도 이상 탐지를 통합한 GUI 애플리케이션입니다.  
+MVTec-AD 데이터셋을 기준으로 정량 평가 및 실험 분석을 수행했습니다.
+
+<img src="assets/result_similarity.png" width="60%"/>
+
+---
+
+## 목차
+1. [주요 기능](#1-주요-기능)
+2. [프로젝트 구조](#2-프로젝트-구조)
+3. [설치 및 설정](#3-설치-및-설정)
+4. [사용 방법](#4-사용-방법)
+5. [이상 탐지 실험 결과](#5-이상-탐지-실험-결과)
+6. [설정 옵션](#6-설정-옵션)
+7. [문제 해결](#7-문제-해결)
+
+---
 
 ## 1. 주요 기능
 
-- **Drag & Drop  인터페이스**: 간단하게 이미지를 끌어다 놓아 검색
-- **OpenAI CLIP / ResNet 기반**: OpenAI의 CLIP 또는 ResNet 모델 선택
-- **빠른 검색**: 사전 계산된 임베딩 데이터베이스로 빠른 유사도 검색
-- **다양한 이미지 포맷 지원**: JPG, PNG, JPEG, JFIF, BMP, TIFF
-- **GPU 가속**: CUDA 지원 시 자동으로 GPU 사용
+### 유사도 검색
+- Drag & Drop 인터페이스로 쿼리 이미지 입력
+- CLIP / ResNet-50 모델 선택 가능
+- 사전 계산된 임베딩 DB 기반 빠른 검색
+- 상위 k개 유사 이미지 및 유사도 점수 표시
+
+### 이상 탐지
+- 비지도 학습 — 정상 이미지만으로 학습, 별도 이상 레이블 불필요
+- 패치 기반 MSE 이상 점수 계산 (16×16 패치 단위 최대 오차)
+- 에러 히트맵 시각화 (`|입력 - 복원|` 오차맵, hot colormap)
+- 카테고리별 threshold 자동 보정 (train/good 분포의 99th percentile)
+- `config.json`으로 threshold 파일 경로 관리
+
+---
 
 ## 2. 프로젝트 구조
 
 ```
-Parts_checker/
+Image-Similarity-Search/
 ├── data/
-│   ├── images/              # 이미지 DB
-│   └── embeddings_db_{model_name}.pkl    # 임베딩 데이터베이스 (자동 생성)
+│   └── {category}/
+│       ├── train/good/          # 정상 학습 이미지
+│       └── test/{defect_type}/  # 테스트 이미지 (MVTec-AD 구조)
 ├── models/
-│   └── embedder.py          # 이미지 임베딩 추출기
+│   ├── embedder.py              # CLIP/ResNet 임베딩 추출
+│   ├── anomaly_detector_encoder.py   # AutoEncoder 모델 및 추론
+│   ├── anomaly_processor.py     # 이미지 전처리
+│   ├── autoencoder_{category}.pth    # 학습된 가중치
+│   └── thresholds_patch.json    # 카테고리별 threshold
 ├── utils/
-│   └── search.py            # 유사도 검색 함수
-├── search_gui_app.py        # GUI 기반 검색 앱
-├── config.py                # 설정 파일
-├── requirements.txt         # 의존성 패키지 목록
-└── README.md
+│   ├── search.py                # 유사도 검색 함수
+│   ├── calibrate_thresholds.py  # threshold 보정 스크립트
+│   ├── evaluate_anomaly.py      # AUROC 정량 평가
+│   ├── visualize_results.py     # 분포/ROC/Ablation 시각화
+│   └── save_heatmap_samples.py  # 히트맵 샘플 저장
+├── results/
+│   ├── score_distributions.png
+│   ├── roc_curves.png
+│   └── ablation_table.png
+├── assets/
+├── gui_app.py                   # 통합 GUI 앱
+├── config.py                    # 유사도 검색 설정
+├── config.json                  # 이상 탐지 설정 (threshold 경로 등)
+└── requirements.txt
 ```
 
-## 3.️ 설치 및 설정
+---
 
-### 1. 필수 요구사항
+## 3. 설치 및 설정
 
+### 필수 요구사항
 - Python 3.10
 - CUDA 12.1 (GPU 사용 시)
 
-### 2. 패키지 설치
+### 패키지 설치
 
 GPU 사용 시:
 ```bash
-# PyTorch (CUDA 버전)
 pip install torch==2.3.0+cu121 torchvision==0.18.0+cu121 --index-url https://download.pytorch.org/whl/cu121
-
-# 나머지 패키지들
 pip install -r requirements.txt
 ```
 
@@ -53,97 +88,113 @@ pip install torch torchvision
 pip install -r requirements.txt
 ```
 
-### 3. 이미지 DB 준비
+### 데이터 준비
 
-`data/images/` 폴더에 DB로 쓸 이미지를 넣어주세요
-- 이미지 파일명은 `카테고리명_일련번호.png` 형태여야 합니다.(예: cable_001.png, grid_000.png)
+**유사도 검색용:**  
+`data/images/` 폴더에 이미지를 넣어주세요. 파일명은 `카테고리명_일련번호.png` 형태여야 합니다. (예: cable_001.png, grid_000.png)
 
-```bash
-mkdir -p data/images
-# 이미지 파일들을 data/images/ 폴더에 복사
+**이상 탐지용 (MVTec-AD 구조):**
 ```
+data/{category}/train/good/   ← 정상 이미지만
+data/{category}/test/good/    ← 정상 테스트
+data/{category}/test/{defect}/← 이상 테스트
+```
+
+---
 
 ## 4. 사용 방법
 
 ### GUI 앱 실행
-
 ```bash
 python gui_app.py
 ```
 
-1. 애플리케이션이 시작되면 자동으로 임베딩 데이터베이스를 생성합니다
-2. 검색할 이미지를 드래그 앤 드롭하세요
-3. 상위 k개(default=5, config.py에서 변경 가능)의 유사한 이미지가 표시됩니다
-
-
-## 5. 설정 옵션
-
-`config.py`에서 다음 설정을 변경할 수 있습니다:
-
-- 모델 및 디바이스 설정
-```python
-MODEL_NAME = "clip"  # 또는 "resnet"
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+### 이상 탐지 threshold 보정 (최초 1회)
+train/good score 분포의 99th percentile을 threshold로 합니다.
+```bash
+python utils/calibrate_thresholds.py
 ```
-- 경로 설정
-```python
-IMAGE_DIR = "data/images"
-DB_PATH = "data/embeddings_db.pkl"
+`models/thresholds_patch.json` 에 카테고리별 threshold가 저장됩니다.
+
+### 정량 평가
+```bash
+python utils/evaluate_anomaly.py   # test 데이터셋으로 정량 평가
+python utils/visualize_results.py  # 시각화 PNG 저장 (results/)
 ```
-- 이미지/GUI 설정
+
+---
+
+## 5. 이상 탐지 실험 결과
+
+MVTec-AD 데이터셋 7개 카테고리 기준 평가입니다.  
+평가 지표: **AUROC** (threshold에 무관한 분리 능력 측정, 1.0 = 완벽, 0.5 = 랜덤)
+
+### Ablation: Global MSE → Patch-based MSE
+
+재학습 없이 inference scoring 방식만 변경 (전체 이미지 평균 → 16×16 패치 단위 최대값).
+
+
+| Category | Global MSE | Patch-based | Δ |
+|----------|:----------:|:-----------:|:---:|
+| bottle | 0.7921 | 0.8206 | +0.028 |
+| cable | 0.5260 | 0.5697 | +0.044 |
+| carpet | 0.4282 | 0.5116 | +0.083 |
+| grid | 0.7561 | 0.9323 | **+0.176** |
+| hazelnut | 0.9146 | 0.9439 | +0.029 |
+| leather | 0.5880 | 0.9209 | **+0.333** |
+| metal_nut | 0.3578 | 0.4321 | +0.074 |
+| **Mean** | **0.6232** | **0.7330** | **+0.110** |
+
+### Score 분포 시각화 (KDE)
+
+<img src="results/score_distributions.png" width="90%"/>
+
+정상/이상 이미지의 Patch MSE Score 분포를 카테고리별로 시각화.  
+분포가 잘 분리될수록 높은 AUROC에 대응됨.
+
+
+
+### 결과 정리
+
+**성공 케이스** — hazelnut(0.944), leather(0.921), grid(0.932)  
+정상 분포가 낮은 score에 밀집되고, 이상 분포가 오른쪽으로 분리됨. 표면 결함처럼 국소적이고 명확한 이상이 패치 단위로 잘 포착됨.
+
+**어느정도 분리** — bottle (0.821)  
+정상이 낮은 쪽에 몰리지만 이상 분포 일부가 정상 범위와 겹침.  
+contamination처럼 시각적으로 미묘한 결함은 score가 낮게 나와 정상과 구분이 어려움.
+
+**실패 케이스** — cable(0.5697), carpet(0.5116), metal_nut(0.432)  
+불규칙 텍스처, 배선 배치의 다양성으로 인해 정상의 score 범위가 넓어 클래스 구분 안됨.  
+정상 이미지에 회전/자세 변형이 많아(다양성) 모델이 이상도 잘 복원 → score 역전 현상.  
+Threshold 조정으로 해결 불가능한 재구성 기반 접근의 구조적 한계.
+
+**한계 및 다음 단계**  
+Pretrained feature 기반 접근(PatchCore)으로 전환하여 pose variation 문제 및 전반적 성능 개선 예정.
+
+---
+
+## 6. 설정 옵션
+
+### config.py 
 ```python
-SUPPORTED_FORMATS = ('.jpg', '.jpeg', '.png', '.jfif', '.bmp', '.tiff', '.webp')
-THUMBNAIL_SIZE = (224, 224)
-DISPLAY_SIZE = (150, 150)
-WINDOW_SIZE = "900x700"
-```
-- 검색 결과 설정
-```python
+MODEL_NAME = "clip"       # "clip" 또는 "resnet"
+DEVICE     = "cuda"       # 자동 감지
 DEFAULT_TOP_K = 5
-MAX_TOP_K = 10
+THRESHOLD_PATH = "models/thresholds_patch.json"
 ```
 
+---
 
-## 6. 성능 최적화
+## 7. 문제 해결
 
-### GPU 사용
-- NVIDIA GPU가 있는 경우 자동으로 CUDA를 사용합니다
-- GPU 메모리가 부족한 경우 `BATCH_SIZE`를 조정하세요
+**`No module named 'models'`**  
+`utils/` 하위 스크립트는 프로젝트 루트에서 실행하세요:  
+```bash
+python utils/calibrate_thresholds.py
+```
 
-### 대용량 이미지 처리
-- 이미지는 자동으로 224x224로 리사이즈됩니다
-- 원본 이미지 품질에는 영향을 주지 않습니다
+**모델 파일 없음 오류**  
+`models/autoencoder_{category}.pth` 파일이 필요합니다. 별도 학습 스크립트로 생성하거나 제공된 가중치를 사용하세요.
 
-## 7. 업그레이드 및 유지보수
-
-### 데이터베이스 재생성
-gui 앱에서 우측 상단 'DB 재생성' 버튼 클릭
-
-### 모델 변경
-다른 모델을 사용하려면 `config.py`에서 `MODEL_NAME`을 변경하거나,</br>
-gui 앱에서 우측 상단 '모델 재설정' 버튼 클릭:
-- `"clip"`: OpenAI CLIP 
-- `"resnet"`: ResNet-50
-
-## 8. 문제 해결
-
-### 일반적인 오류들
-
-**"only integer tensors of a single element can be converted to an index"**
-- 빈 데이터베이스이거나 손상된 이미지 파일이 원인
-- `data/images/` 폴더에 유효한 이미지가 있는지 확인
-
-**메모리 부족 오류**
-- GPU 메모리가 부족한 경우 CPU 모드로 전환: `DEVICE = "cpu"`
-- 큰 이미지 파일들을 사전에 압축
-
-**느린 검색 속도**
-- 첫 실행 시 임베딩 생성에 시간이 걸립니다
-- 이후 실행에서는 저장된 데이터베이스를 사용해 빠릅니다
-
-### 로그 확인
-
-애플리케이션 실행 시 콘솔에 다음과 같은 정보가 출력됩니다:
-- 모델 로딩 상태
-- 데이터베이스 생성/로드 진행상황
-- 검색 결과 및 오류 메시지
+**메모리 부족**  
+GPU 메모리 부족 시 `config.py`에서 `DEVICE = "cpu"` 로 변경하세요.

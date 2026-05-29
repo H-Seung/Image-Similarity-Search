@@ -8,3 +8,4 @@ dd
 *.pth
 .claude
 models/thresholds.json
+results/heatmap_samples
