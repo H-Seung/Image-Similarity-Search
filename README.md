@@ -4,8 +4,8 @@ CLIP / ResNet-50 기반 이미지 유사도 검색과 AutoEncoder 기반 비지�
 MVTec-AD 데이터셋을 기준으로 정량 평가 및 실험 분석을 수행했습니다.
 
 <div style="display: flex; gap: 10px;">
-    <img src="assets/result_similarity.png" width="40%"/>
-    <img src="assets/result_anomaly.png" width="40%"/>
+    <img src="assets/result_similarity.png" height="300" style="object-fit: contain;"/>
+    <img src="assets/result_anomaly.png" height="300" style="object-fit: contain;"/>
 </div>
 
 ---
