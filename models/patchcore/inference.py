@@ -8,7 +8,7 @@ from sklearn.neighbors import NearestNeighbors
 from PIL import Image
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.cm as cm
+import matplotlib
 from config import PC_THRESHOLD_PATH
 
 
@@ -83,6 +83,6 @@ class PatchCoreInference:
         score_up = F.interpolate(score_tensor, size=output_size,
                                  mode='bilinear', align_corners=False).squeeze().numpy()
 
-        colored = cm.get_cmap('hot')(score_up)
+        colored = matplotlib.colormaps['hot'](score_up)
         colored_rgb = (colored[:, :, :3] * 255).astype(np.uint8)
         return Image.fromarray(colored_rgb)

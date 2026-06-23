@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from PIL import Image, ImageFilter
 import matplotlib
 matplotlib.use('Agg') # tkinter 백엔드 충돌 방지
-import matplotlib.cm as cm
+import matplotlib
 from .model import AutoEncoder
 from models.autoencoder.anomaly_processor import load_and_preprocess_image
 from config import AE_THRESHOLD_PATH
@@ -70,7 +70,7 @@ def compute_error_heatmap(input_tensor, output_tensor):
     if max_val > min_val:                                        
         error_np = (error_np - min_val) / (max_val - min_val)   
 
-    colored = cm.get_cmap('hot')(error_np)                       # hot 컬러맵 적용 (오류 클수록 흰/노랑, 작을수록 검정)
+    colored = matplotlib.colormaps['hot'](error_np)              # hot 컬러맵 적용 (오류 클수록 흰/노랑, 작을수록 검정)
     colored_rgb = (colored[:, :, :3] * 255).astype(np.uint8)    # RGBA → RGB
 
     heatmap = Image.fromarray(colored_rgb)                       

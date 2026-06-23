@@ -499,6 +499,8 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                 self.show_reconstructed_heatmap(heatmap)
                 
             except Exception as e:
+                self.lift() # 에러 메시지가 항상 앞에 오도록 설정
+                self.focus_force()                
                 messagebox.showerror("이상치 추론 오류", f"분석 실패: {e}")
                 self.lbl_anomaly_status.config(text="❌ 분석 실패", fg="red")
 
