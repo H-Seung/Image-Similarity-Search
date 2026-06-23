@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-from models.anomaly_detector_encoder import AutoEncoder
+from models.autoencoder.inference import AutoEncoder
 from tqdm.auto import tqdm
 
 # config

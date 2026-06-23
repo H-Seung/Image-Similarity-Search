@@ -14,21 +14,14 @@ import torch
 from torchvision import transforms
 from PIL import Image
 from tqdm import tqdm
-from models.anomaly_detector_encoder import AutoEncoder, compute_anomaly_score, compute_patch_anomaly_score 
+from models.autoencoder.inference import AutoEncoder, compute_anomaly_score, compute_patch_anomaly_score 
+from utils.common import get_available_categories
 
 DATA_DIR = os.path.join(ROOT_DIR, "data")
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
-THRESHOLD_JSON = os.path.join(MODELS_DIR, "thresholds_patch.json")
+CATEGORIES_PATH = os.path.join(ROOT_DIR, "models", "used_categories.json")
+THRESHOLD_JSON = os.path.join(MODELS_DIR, "autoencoder", "weights", "thresholds_patch.json")
 PERCENTILE = 99
-
-
-def get_available_categories():
-    categories = []
-    for fname in os.listdir(MODELS_DIR):
-        if fname.startswith("autoencoder_") and fname.endswith(".pth") and "_prep" not in fname:
-            cat = fname[len("autoencoder_"):-len(".pth")]
-            categories.append(cat)
-    return sorted(categories)
 
 
 def compute_train_scores(category):

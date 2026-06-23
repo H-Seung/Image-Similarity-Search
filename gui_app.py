@@ -11,8 +11,11 @@ import tkinterdnd2 as tkdnd
 from config import *
 from models.embedder import Embedder
 from utils.search import search_similar
-from models.anomaly_detector_encoder import run_anomaly_inference
+from models.autoencoder.inference import run_anomaly_inference
+from models.patchcore.inference import run_patchcore_inference
 
+
+MB_DIR = os.path.join(os.path.dirname(__file__), "models", "patchcore", "memory_bank")
 
 class ImageSearchApp(tkdnd.TkinterDnD.Tk):
     def __init__(self):
@@ -183,7 +186,17 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         # 1. 메인 프레임을 부모 탭(parent) 내부에 생성 
         main_frame = tk.Frame(parent)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
+        
+        # 이상 탐지 모델 선택
+        model_sel_frame = tk.Frame(main_frame)
+        model_sel_frame.pack(anchor="e", padx=10)
+        tk.Label(model_sel_frame, text="탐지 모델:", font=("Arial", 10)).pack(side=tk.LEFT)
+        self.anomaly_model_var = tk.StringVar(value="ae")
+        tk.Radiobutton(model_sel_frame, text="AutoEncoder", variable=self.anomaly_model_var,
+                    value="ae",        font=("Arial", 10)).pack(side=tk.LEFT, padx=6)
+        tk.Radiobutton(model_sel_frame, text="PatchCore",   variable=self.anomaly_model_var,
+                    value="patchcore", font=("Arial", 10)).pack(side=tk.LEFT, padx=6)
+        
         # 2. 상단 안내 문구 
         anomaly_label = tk.Label(main_frame, 
                                  text="분석하려는 이미지를 드래그 앤 드롭하면,\nAI 모델이 이미지의 이상(불량) 여부를 탐지합니다.",
@@ -472,13 +485,18 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                 category = filename_no_ext.split("_")[0] if "_" in filename_no_ext else filename_no_ext
                 
                 # AI 이상치 추론 엔진 구동
-                anomaly_score, anomaly_status, reconstructed_tensor = run_anomaly_inference(filepath, category)
+                selected_model = self.anomaly_model_var.get()
+                if selected_model == "patchcore":
+                    anomaly_score, anomaly_status, heatmap = run_patchcore_inference(
+                        filepath, category, MB_DIR)
+                else:
+                    anomaly_score, anomaly_status, heatmap = run_anomaly_inference(filepath, category)
 
                 # 상위 탭 분기 호출 (이상치 전용 데이터 전달)
                 self.show_results(results=None, anomaly_score=anomaly_score, anomaly_status=anomaly_status)
                 
                 # 우측 맵 시각화 연동
-                self.show_reconstructed_heatmap(reconstructed_tensor)
+                self.show_reconstructed_heatmap(heatmap)
                 
             except Exception as e:
                 messagebox.showerror("이상치 추론 오류", f"분석 실패: {e}")

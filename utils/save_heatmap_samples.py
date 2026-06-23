@@ -9,7 +9,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
 from PIL import Image, ImageDraw
-from models.anomaly_detector_encoder import run_anomaly_inference
+from models.autoencoder.inference import run_anomaly_inference
+from utils.common import get_available_categories, unique_path
 
 DATA_DIR   = os.path.join(ROOT_DIR, "data")
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
@@ -19,14 +20,6 @@ os.makedirs(OUT_DIR, exist_ok=True)
 IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.bmp')
 IMG_SIZE   = (128, 128)
 PAD        = 16
-
-
-def get_available_categories():
-    cats = []
-    for fname in os.listdir(MODELS_DIR):
-        if fname.startswith("autoencoder_") and fname.endswith(".pth") and "_prep" not in fname:
-            cats.append(fname[len("autoencoder_"):-len(".pth")])
-    return sorted(cats)
 
 
 def first_image(folder):
@@ -58,8 +51,9 @@ def save_sample(img_path, category, defect_type):
               f'Score: {loss:.6f}   Result: {result}', fill=(40, 40, 40))
 
     out_path = os.path.join(OUT_DIR, f"{category}_{defect_type}.png")
+    out_path = unique_path(out_path)
     canvas.save(out_path)
-    print(f"  저장: {category}_{defect_type}.png  [{result}  score={loss:.6f}]")
+    print(f"  저장: {out_path}  [{result}  score={loss:.6f}]")
 
 
 def main():

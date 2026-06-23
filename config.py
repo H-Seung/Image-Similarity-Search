@@ -11,7 +11,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 IMAGE_DIR = os.path.join(DATA_DIR, "images")
 DB_PATH = os.path.join(DATA_DIR, "embeddings_db.pkl")
-THRESHOLD_PATH = os.path.join(BASE_DIR, "models", "thresholds_patch.json") # 이상 탐지 threshold
+AE_THRESHOLD_PATH = os.path.join(BASE_DIR, "models", "autoencoder", "weights", "thresholds_patch.json") 
+PC_THRESHOLD_PATH = os.path.join(BASE_DIR, "models", "patchcore", "memory_bank",  "thresholds.json")
+
 
 # 검색 설정
 DEFAULT_TOP_K = 5

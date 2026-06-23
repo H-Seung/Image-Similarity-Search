@@ -6,6 +6,9 @@ dd
 /data_processed
 *.xlsx
 *.pth
+*.pkl
 .claude
-models/thresholds.json
+models/autoencoder/weights/*.json
+models/patchcore/memory_bank/*.json
 results/heatmap_samples
+*.npz

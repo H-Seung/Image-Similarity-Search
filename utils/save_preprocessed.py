@@ -1,7 +1,7 @@
 import os
 from PIL import Image
 from torchvision import transforms
-from models.anomaly_processor import get_category_transform
+from models.autoencoder.anomaly_processor import get_category_transform
 
 def save_tensor_as_image(tensor, save_path):
     """Tensor(C,H,W) → PIL 이미지로 변환 후 저장"""
