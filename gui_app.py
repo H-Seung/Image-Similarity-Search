@@ -24,6 +24,8 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         self.geometry(WINDOW_SIZE)
         self.resizable(True, True)
 
+        self.current_model_name = MODEL_NAME.lower()
+
         # 1. 메인 탭 위젯(Notebook) 생성
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True)
@@ -56,10 +58,10 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
 
         self.init_components()
         
+
     def init_components(self):
         """백그라운드에서 컴포넌트 초기화"""
         try:
-            self.current_model_name = MODEL_NAME.lower()
             self.stat_label.config(text=f"모델 로딩 중... ({MODEL_NAME.upper()} on {DEVICE})")
             self.update()
 
@@ -84,201 +86,158 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
 
 
     def setup_similarity_ui(self, parent):    
-        # 1. 메인 프레임을 부모 탭(parent) 내부에 생성
+        # 메인 프레임을 부모 탭(parent) 내부에 생성
         main_frame = tk.Frame(parent)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=12)
 
-        # 2. 드래그앤드롭 안내 
-        self.label = tk.Label(main_frame, 
-                              text="검색하려는 이미지를 드래그 앤 드롭하면,\nDB 내 이미지에서 유사한 이미지를 검색합니다.",
-                              font=("Arial", 12), fg="black", justify=tk.CENTER)
-        self.label.pack(pady=10)
+        # 헤더
+        header = tk.Frame(main_frame)
+        header.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(header, text="유사 이미지 검색",
+                 font=("Arial", 15, "bold"), fg="#1a1a1a").pack(anchor="w")
+        tk.Label(header, text="검색하려는 이미지를 드래그 앤 드롭하면, DB 내 이미지에서 유사한 이미지를 검색합니다.",
+                 font=("Arial", 11), fg="#555555").pack(anchor="w", pady=(2, 0))
         
-        # 3. 상단 정보 및 제어 영역 프레임 (3분할 grid 구조)
-        info_frame = tk.Frame(main_frame)
-        info_frame.pack(fill=tk.X, pady=(0, 11))
+        # 컨트롤 바
+        ctrl = tk.Frame(main_frame, bg="#f5f5f5",
+                        highlightthickness=1, highlightbackground="#e0e0e0")
+        ctrl.pack(fill=tk.X, pady=(0, 12), ipady=6)
 
-        # 좌, 우, 가운데가 완벽한 비율을 갖도록 열(column) 가중치 설정
-        info_frame.columnconfigure(0, weight=1, uniform="top_info")  # 왼쪽 구역
-        info_frame.columnconfigure(1, weight=1, uniform="top_info")  # 가운데 구역
-        info_frame.columnconfigure(2, weight=1, uniform="top_info")  # 오른쪽 구역
+        left = tk.Frame(ctrl, bg="#f5f5f5")
+        left.pack(side=tk.LEFT, padx=12)
+        tk.Label(left, text="모델", font=("Arial", 10, "bold"),
+                 bg="#f5f5f5", fg="#333333").pack(side=tk.LEFT, padx=(0, 8))
+        self.similarity_model_var = tk.StringVar(value=self.current_model_name)
+        for val, lbl in (("clip", "CLIP"), ("resnet", "ResNet")):
+            tk.Radiobutton(left, text=lbl, variable=self.similarity_model_var,
+                           value=val, font=("Arial", 10), bg="#f5f5f5",
+                           command=self._on_similarity_model_change).pack(side=tk.LEFT, padx=4)
 
-        # [왼쪽 구역] DB 개수 및 현재 모델 정보 
-        left_info_subframe = tk.Frame(info_frame)
-        left_info_subframe.grid(row=0, column=0, sticky="w", padx=10)
+        self.center_status_label = tk.Label(ctrl, text="⌛ 준비 중...",
+                                            font=("Arial", 11, "bold"),
+                                            bg="#f5f5f5", fg="#333333")
+        self.center_status_label.pack(side=tk.LEFT, expand=True)
 
-        # 상태 및 DB 개수 레이블
-        self.stat_label = tk.Label(left_info_subframe, text="DB: 로딩 중...", font=("Arial", 11), fg="black")
-        self.stat_label.pack(anchor="w")
+        right = tk.Frame(ctrl, bg="#f5f5f5")
+        right.pack(side=tk.RIGHT, padx=12)
+        self.btn_rebuild = tk.Button(right, text="DB 재생성",
+                                     command=self.rebuild_database,
+                                     font=("Arial", 10), width=10)
+        self.btn_rebuild.pack(anchor="e")
+        self.stat_label = tk.Label(right, text="DB: 로딩 중...",
+                                   font=("Arial", 10), bg="#f5f5f5", fg="#666666")
+        self.stat_label.pack(anchor="e", pady=(3, 0))
+        self.model_info_label = tk.Label(right,
+                                         text=f"현재 모델: {MODEL_NAME.upper()} ({DEVICE})",
+                                         font=("Arial", 10), bg="#f5f5f5", fg="#666666")
+        self.model_info_label.pack(anchor="e", pady=(2, 0))
 
-        # 현재 선택한 모델 정보 표시 레이블
-        self.model_info_label = tk.Label(left_info_subframe, text=f"현재 모델: {MODEL_NAME.upper()} ({DEVICE})", 
-                                         font=("Arial", 11), fg="black")
-        self.model_info_label.pack(anchor="w", pady=(2, 0))
+        # 이미지 영역
+        img_row = tk.Frame(main_frame)
+        img_row.pack(pady=(0, 8))
 
-        # [가운데 구역] 상태 문구
-        center_info_subframe = tk.Frame(info_frame)
-        center_info_subframe.grid(row=0, column=1, sticky="nsew") 
-
-        # 상태 알림용 중앙 레이블 (초기에는 빈 값 혹은 로딩 상태, 나중에 "✅ 검색 완료!" 등으로 변경)
-        self.center_status_label = tk.Label(center_info_subframe, text="⌛ 준비 중...", font=("Arial", 12, "bold"), fg="black")
-        self.center_status_label.pack(expand=True)
-
-        # [오른쪽 구역] 버튼 제어 영역 
-        right_btn_subframe = tk.Frame(info_frame)
-        right_btn_subframe.grid(row=0, column=2, sticky="e", padx=10)
-
-        # DB 재생성 버튼
-        self.btn_rebuild = tk.Button(right_btn_subframe, text="DB 재생성", command=self.rebuild_database, font=("Arial", 11), width=12)
-        self.btn_rebuild.pack(anchor="e", pady=(0, 4))
-
-        # 모델 재설정 버튼
-        self.btn_change_model = tk.Button(right_btn_subframe, text="모델 재설정", command=self.open_model_selection_popup, font=("Arial", 11), width=12)
-        self.btn_change_model.pack(anchor="e")
-        
-        # 4. 쿼리(검색대상) 이미지 및 매칭 결과 2분할 표시 컨테이너 프레임
-        query_match_container = tk.Frame(main_frame)
-        query_match_container.pack(pady=7)
-
-        # [왼쪽] 쿼리 이미지 표시 영역
-        query_frame = tk.Frame(query_match_container, padx=20)
-        query_frame.grid(row=0, column=0, sticky="n")
-
-        tk.Label(query_frame, text="검색 이미지", font=("Arial", 14, "bold")).pack(pady=5)
-        self.canvas_query = tk.Canvas(query_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
-                                      bg="white", bd=0, highlightthickness=0)
+        q_frame = tk.Frame(img_row, padx=20)
+        q_frame.grid(row=0, column=0, sticky="n")
+        tk.Label(q_frame, text="검색 이미지",
+                 font=("Arial", 13, "bold"), fg="#1a1a1a").pack(pady=(0, 5))
+        self.canvas_query = tk.Canvas(q_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
+                                      bg="white", bd=0,
+                                      highlightthickness=1, highlightbackground="#dddddd")
         self.canvas_query.pack()
-        self.lbl_query_name = tk.Label(query_frame, text="", font=("Arial", 10)) # 파일명 레이블
-        self.lbl_query_name.pack(pady=2)
+        self.lbl_query_name = tk.Label(q_frame, text="", font=("Arial", 10), fg="#888888")
+        self.lbl_query_name.pack(pady=(3, 0))
 
-        # [오른쪽] 가장 유사한 이미지 표시 영역
-        best_match_frame = tk.Frame(query_match_container, padx=20)
-        best_match_frame.grid(row=0, column=1, sticky="n", padx=(80, 20))
-
-        tk.Label(best_match_frame, text="유사 이미지", font=("Arial", 14, "bold")).pack(pady=5)
-        self.canvas_best = tk.Canvas(best_match_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
-                                     bg="white", bd=0, highlightthickness=1, highlightbackground="cyan")
+        b_frame = tk.Frame(img_row, padx=20)
+        b_frame.grid(row=0, column=1, sticky="n", padx=(80, 20))
+        tk.Label(b_frame, text="유사 이미지",
+                 font=("Arial", 13, "bold"), fg="#1a1a1a").pack(pady=(0, 5))
+        self.canvas_best = tk.Canvas(b_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
+                                     bg="white", bd=0,
+                                     highlightthickness=1, highlightbackground="cyan")
         self.canvas_best.pack()
-        self.lbl_best_name = tk.Label(best_match_frame, text="", font=("Arial", 10)) # 파일명 레이블
-        self.lbl_best_name.pack(pady=2)
+        self.lbl_best_name = tk.Label(b_frame, text="", font=("Arial", 10), fg="#888888")
+        self.lbl_best_name.pack(pady=(3, 0))
 
-        # 5. 결과 하단 스크롤 영역
-        result_label_frame = tk.Frame(main_frame)
-        result_label_frame.pack(fill=tk.X, pady=(1, 1))
-        tk.Label(result_label_frame, text=f"유사한 이미지 (상위 {DEFAULT_TOP_K}개)",
-                 font=("Arial", 12, "bold")).pack()
-
-        # 스크롤 가능 결과 프레임
+        # 결과 섹션
+        tk.Label(main_frame, text=f"유사한 이미지 (상위 {DEFAULT_TOP_K}개)",
+                 font=("Arial", 12, "bold"), fg="#1a1a1a").pack(anchor="w", pady=(0, 4))
         self.result_canvas = tk.Canvas(main_frame, height=220)
-        scrollbar = ttk.Scrollbar(main_frame, orient="horizontal", command=self.result_canvas.xview)
+        scrollbar = ttk.Scrollbar(main_frame, orient="horizontal",
+                                  command=self.result_canvas.xview)
         self.scrollable_frame = ttk.Frame(self.result_canvas)
-
         self.scrollable_frame.bind(
             "<Configure>",
-            lambda e: self.result_canvas.configure(scrollregion=self.result_canvas.bbox("all"))
+            lambda e: self.result_canvas.configure(
+                scrollregion=self.result_canvas.bbox("all"))
         )
         self.result_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.result_canvas.configure(xscrollcommand=scrollbar.set)
-
         self.result_canvas.pack(side="top", fill=tk.BOTH, expand=True, pady=(2, 0))
         scrollbar.pack(side="top", fill="x")
 
     def setup_anomaly_ui(self, parent):
-        # 1. 메인 프레임을 부모 탭(parent) 내부에 생성 
+        # 메인 프레임을 부모 탭(parent) 내부에 생성 
         main_frame = tk.Frame(parent)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # 이상 탐지 모델 선택
-        model_sel_frame = tk.Frame(main_frame)
-        model_sel_frame.pack(anchor="e", padx=10)
-        tk.Label(model_sel_frame, text="탐지 모델:", font=("Arial", 10)).pack(side=tk.LEFT)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=12)
+
+        # 헤더
+        header = tk.Frame(main_frame)
+        header.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(header, text="이상 탐지",
+                 font=("Arial", 15, "bold"), fg="#1a1a1a").pack(anchor="w")
+        tk.Label(header, text="분석하려는 이미지를 드래그 앤 드롭하면, AI 모델이 이미지의 이상(불량) 여부를 탐지합니다.",
+                 font=("Arial", 11), fg="#555555").pack(anchor="w", pady=(2, 0))
+
+        # 컨트롤 바
+        ctrl = tk.Frame(main_frame, bg="#f5f5f5",
+                        highlightthickness=1, highlightbackground="#e0e0e0")
+        ctrl.pack(fill=tk.X, pady=(0, 12), ipady=6)
+        left = tk.Frame(ctrl, bg="#f5f5f5")
+        left.pack(side=tk.LEFT, padx=12)
+        tk.Label(left, text="탐지 모델", font=("Arial", 10, "bold"),
+                 bg="#f5f5f5", fg="#333333").pack(side=tk.LEFT, padx=(0, 8))
         self.anomaly_model_var = tk.StringVar(value="ae")
-        tk.Radiobutton(model_sel_frame, text="AutoEncoder", variable=self.anomaly_model_var,
-                    value="ae",        font=("Arial", 10)).pack(side=tk.LEFT, padx=6)
-        tk.Radiobutton(model_sel_frame, text="PatchCore",   variable=self.anomaly_model_var,
-                    value="patchcore", font=("Arial", 10)).pack(side=tk.LEFT, padx=6)
-        
-        # 2. 상단 안내 문구 
-        anomaly_label = tk.Label(main_frame, 
-                                 text="분석하려는 이미지를 드래그 앤 드롭하면,\nAI 모델이 이미지의 이상(불량) 여부를 탐지합니다.",
-                                 font=("Arial", 12), fg="black", justify=tk.CENTER)
-        anomaly_label.pack(pady=10)
+        for val, lbl in (("ae", "AutoEncoder"), ("patchcore", "PatchCore")):
+            tk.Radiobutton(left, text=lbl, variable=self.anomaly_model_var,
+                           value=val, font=("Arial", 10),
+                           bg="#f5f5f5").pack(side=tk.LEFT, padx=4)
 
-        # [상단 판정 결과 구역]: 정상/불량 스탬프와 점수가 크게 표시될 공간
-        self.anomaly_result_frame = tk.Frame(main_frame)
-        self.anomaly_result_frame.pack(fill=tk.X, pady=(20, 15))
-        
-        # 초기 상태 표시 레이블
-        self.lbl_anomaly_status = tk.Label(self.anomaly_result_frame, text="⌛ 이미지 드롭 대기 중", 
+        # 판정 결과
+        self.lbl_anomaly_status = tk.Label(main_frame, text="⌛ 이미지 드롭 대기 중",
                                            font=("Arial", 14, "bold"), fg="gray")
-        self.lbl_anomaly_status.pack(side=tk.TOP, anchor="c")
+        self.lbl_anomaly_status.pack(pady=(0, 12))
 
-        # [중앙 2분할 시각화 컨테이너]
+        # 시각화
         visual_container = tk.Frame(main_frame)
-        visual_container.pack(pady=(20, 20), expand=False)
-        
-        # 좌우 폭을 균등하게 강제 고정 (글자 길이에 밀리지 않게 조율)
+        visual_container.pack(expand=False)
         visual_container.columnconfigure(0, weight=1, uniform="anomaly_view")
         visual_container.columnconfigure(1, weight=1, uniform="anomaly_view")
 
-        # [좌측 칸]: 검사 대상 입력 이미지 영역
-        left_view_frame = tk.Frame(visual_container)
-        left_view_frame.grid(row=0, column=0, sticky="n", padx=(20, 80))
-
-        tk.Label(left_view_frame, text="검사 대상 이미지 (Input)", font=("Arial", 13, "bold"), fg="#333333").pack(pady=5)
-        self.canvas_anomaly_query = tk.Canvas(left_view_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
-                                              bg="white", bd=0, highlightthickness=0)
+        left_view = tk.Frame(visual_container)
+        left_view.grid(row=0, column=0, sticky="n", padx=(20, 80))
+        tk.Label(left_view, text="검사 대상 이미지 (Input)",
+                 font=("Arial", 13, "bold"), fg="#1a1a1a").pack(pady=(0, 5))
+        self.canvas_anomaly_query = tk.Canvas(left_view,
+                                              width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
+                                              bg="white", bd=0,
+                                              highlightthickness=1, highlightbackground="#dddddd")
         self.canvas_anomaly_query.pack()
-        
-        self.lbl_anomaly_query_name = tk.Label(left_view_frame, text="", font=("Arial", 10), fg="gray")
-        self.lbl_anomaly_query_name.pack(pady=2)
+        self.lbl_anomaly_query_name = tk.Label(left_view, text="",
+                                               font=("Arial", 10), fg="#888888")
+        self.lbl_anomaly_query_name.pack(pady=(3, 0))
 
-        # [우측 칸]: 모델 복원 오차 집중 구역 (Heatmap)
-        right_view_frame = tk.Frame(visual_container)
-        right_view_frame.grid(row=0, column=1, sticky="n", padx=(80, 20))
-
-        tk.Label(right_view_frame, text="이상 부위 추적 맵 (Heatmap)", font=("Arial", 13, "bold"), fg="#333333").pack(pady=5)
-        self.canvas_anomaly_heatmap = tk.Canvas(right_view_frame, width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
-                                                bg="white", bd=0, highlightthickness=0)
+        right_view = tk.Frame(visual_container)
+        right_view.grid(row=0, column=1, sticky="n", padx=(80, 20))
+        tk.Label(right_view, text="이상 부위 추적 맵 (Heatmap)",
+                 font=("Arial", 13, "bold"), fg="#1a1a1a").pack(pady=(0, 5))
+        self.canvas_anomaly_heatmap = tk.Canvas(right_view,
+                                                width=CANVAS_SIZE[0], height=CANVAS_SIZE[1],
+                                                bg="white", bd=0,
+                                                highlightthickness=1, highlightbackground="#dddddd")
         self.canvas_anomaly_heatmap.pack()
-        
-        self.lbl_anomaly_heatmap_name = tk.Label(right_view_frame, text="", font=("Arial", 10), fg="gray")
-        self.lbl_anomaly_heatmap_name.pack(pady=2)
-
-
-    def open_model_selection_popup(self):
-        """⚙️ 모델 재설정 팝업: CLIP / ResNet을 선택할 수 있는 팝업창을 띄움"""
-        popup = tk.Toplevel(self)
-        popup.title("모델 변경")
-        popup.geometry("300x150")
-        popup.resizable(False, False)
-        popup.grab_set() # 팝업을 메인 창 중앙 근처에 띄우기
-        
-        lbl = tk.Label(popup, text="변경할 모델을 선택하세요:", font=("Arial", 11, "bold"))
-        lbl.pack(pady=15)
-        
-        selected_model = tk.StringVar(value=self.current_model_name)  # 라디오 버튼 변수 (현재 활성화된 모델을 기본값으로 선택)
-        rb_frame = tk.Frame(popup)
-        rb_frame.pack(pady=5)
-        
-        rb_clip = tk.Radiobutton(rb_frame, text="CLIP", variable=selected_model, value="clip", font=("Arial", 10))
-        rb_clip.pack(side=tk.LEFT, padx=20)
-        rb_resnet = tk.Radiobutton(rb_frame, text="ResNet", variable=selected_model, value="resnet", font=("Arial", 10))
-        rb_resnet.pack(side=tk.LEFT, padx=20)
-        
-        def on_confirm():
-            new_model = selected_model.get()
-            popup.destroy() # 팝업 닫기
-            
-            # 사용자가 현재 모델과 다른 것을 골랐을 때만 변경 진행
-            if new_model != self.current_model_name:
-                if messagebox.askyesno("모델 변경 확인", f"모델을 {new_model.upper()}(으)로 변경하시겠습니까?"):
-                    self.switch_model(new_model)
-            else:
-                messagebox.showinfo("알림", "현재 이미 선택되어 있는 모델입니다.")
-
-        btn_confirm = tk.Button(popup, text="적용", command=on_confirm, font=("Arial", 10, "bold"), width=10, bg="lightgray")
-        btn_confirm.pack(pady=10)
+        self.lbl_anomaly_heatmap_name = tk.Label(right_view, text="",
+                                                 font=("Arial", 10), fg="#888888")
+        self.lbl_anomaly_heatmap_name.pack(pady=(3, 0))
 
 
     def switch_model(self, new_model_name):
@@ -310,6 +269,18 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         self.model_info_label.config(text=f"현재 모델: {new_model_name.upper()} ({DEVICE})")
         self.center_status_label.config(text="✅ 모델 변경 완료!", fg="green")
         self.current_model_name = new_model_name.lower()
+
+    def _on_similarity_model_change(self):
+        new_model = self.similarity_model_var.get()
+        if new_model == self.current_model_name:
+            return
+        if not messagebox.askyesno("모델 변경 확인",
+                                   f"모델을 {new_model.upper()}(으)로 변경하시겠습니까?"):
+            self.similarity_model_var.set(self.current_model_name)
+            return
+        self.switch_model(new_model)
+        self.similarity_model_var.set(self.current_model_name)
+
 
     def get_current_db_path(self):
         """ DB명 처리: 현재 설정된 모델명에 맞춰 고유한 pkl 경로를 반환"""
