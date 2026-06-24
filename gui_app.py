@@ -121,7 +121,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         right = tk.Frame(ctrl, bg="#f5f5f5")
         right.pack(side=tk.RIGHT, padx=12)
         self.btn_rebuild = tk.Button(right, text="DB 재생성",
-                                     command=self.rebuild_database,
+                                     command=self.rebuild_db,
                                      font=("Arial", 10), width=10)
         self.btn_rebuild.pack(anchor="e")
         self.stat_label = tk.Label(right, text="DB: 로딩 중...",
@@ -322,7 +322,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
     def get_current_db_path(self):
         """ DB명 처리: 현재 설정된 모델명에 맞춰 고유한 pkl 경로를 반환"""
         base, ext = os.path.splitext(DB_PATH)
-        return f"{base}_{MODEL_NAME.lower()}{ext}"
+        return f"{base}_{self.current_model_name}{ext}"
     
     def load_db(self):
         """DB 로드"""
@@ -364,7 +364,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             if VERBOSE:
                 print("🔧 [{MODEL_NAME}] DB 차원 문제 수정 및 재저장 중...")
             try:
-                with open(self.get_current_db_path, "wb") as f:
+                with open(self.get_current_db_path(), "wb") as f:
                     pickle.dump(fixed_db, f)
             except Exception as e:
                 if LOG_ERRORS:
@@ -412,7 +412,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
 
         return db
 
-    def rebuild_database(self):
+    def rebuild_db(self):
         """데이터베이스 재구축"""
         if not messagebox.askyesno("확인", f"현재 모델({MODEL_NAME})의 기존 DB를 지우고 재구축하시겠습니까?"):
             return
@@ -494,7 +494,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                 self.show_results(results=None, anomaly_score=anomaly_score, anomaly_status=anomaly_status)
                 
                 # 우측 맵 시각화 연동
-                self.show_reconstructed_heatmap(heatmap)
+                self.show_anomaly_heatmap(heatmap)
                 
             except Exception as e:
                 self.lift() # 에러 메시지가 항상 앞에 오도록 설정
@@ -503,7 +503,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
                 self.lbl_anomaly_status.config(text="❌ 분석 실패", fg="red")
 
 
-    def show_reconstructed_heatmap(self, heatmap_img):
+    def show_anomaly_heatmap(self, heatmap_img):
         """에러맵 PIL Image를 우측 Heatmap 캔버스에 드로잉"""
         try:
             heatmap_img = heatmap_img.resize(THUMBNAIL_SIZE, Image.Resampling.LANCZOS)

@@ -158,14 +158,14 @@ python utils/ae_evaluate.py
 
 **1. 메모리뱅크 생성 + Threshold 보정:**
 ```bash
-python utils/patchcore_calibrate.py
+python utils/pc_calibrate.py
 ```
 WideResNet-50으로 train/good 이미지 feature를 추출하고 K-Center Greedy coreset(10%)을 구성합니다.  
 → `models/patchcore/memory_bank/patchcore_{category}.pkl`, `thresholds.json`
 
 **2. 정량 평가:**
 ```bash
-python utils/patchcore_evaluate.py
+python utils/pc_evaluate.py
 ```
 → `results/patchcore/` (AUROC, KDE 시각화, .npz)
 
@@ -175,7 +175,7 @@ python utils/patchcore_evaluate.py
 ```bash
 python utils/visualize_comparison.py
 ```
-`ae_evaluate.py` 와 `patchcore_evaluate.py` 의 `.npz` 결과를 재사용합니다 (재추론 없음).  
+`ae_evaluate.py` 와 `pc_evaluate.py` 의 `.npz` 결과를 재사용합니다 (재추론 없음).  
 → `results/comparison/comparison_table.csv`, `results/comparison/comparison_roc.png`
 
 ---
@@ -275,11 +275,11 @@ cd utils && python ae_evaluate.py  # ❌
 `python utils/train_autoencoder.py` 로 먼저 학습하세요.
 
 **PatchCore 메모리뱅크 없음 오류**  
-`python utils/patchcore_calibrate.py` 를 실행해 메모리뱅크를 생성하세요.  
+`python utils/pc_calibrate.py` 를 실행해 메모리뱅크를 생성하세요.  
 WideResNet-50 다운로드가 최초 1회 자동으로 수행됩니다 (약 70MB).
 
 **`visualize_comparison.py` 실행 오류**  
-`ae_evaluate.py` 와 `patchcore_evaluate.py` 를 먼저 실행해 `.npz` 파일을 생성해야 합니다.
+`ae_evaluate.py` 와 `pc_evaluate.py` 를 먼저 실행해 `.npz` 파일을 생성해야 합니다.
 
 **메모리 부족**  
 GPU 메모리 부족 시 `config.py`에서 `DEVICE = "cpu"` 로 변경하세요.  
