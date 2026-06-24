@@ -59,6 +59,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
     def init_components(self):
         """백그라운드에서 컴포넌트 초기화"""
         try:
+            self.current_model_name = MODEL_NAME.lower()
             self.stat_label.config(text=f"모델 로딩 중... ({MODEL_NAME.upper()} on {DEVICE})")
             self.update()
 
@@ -256,7 +257,7 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         lbl = tk.Label(popup, text="변경할 모델을 선택하세요:", font=("Arial", 11, "bold"))
         lbl.pack(pady=15)
         
-        selected_model = tk.StringVar(value=MODEL_NAME.lower()) # 라디오 버튼 변수 (현재 활성화된 모델을 기본값으로 선택)
+        selected_model = tk.StringVar(value=self.current_model_name)  # 라디오 버튼 변수 (현재 활성화된 모델을 기본값으로 선택)
         rb_frame = tk.Frame(popup)
         rb_frame.pack(pady=5)
         
@@ -270,56 +271,45 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             popup.destroy() # 팝업 닫기
             
             # 사용자가 현재 모델과 다른 것을 골랐을 때만 변경 진행
-            if new_model != MODEL_NAME.lower():
-                if messagebox.askyesno("모델 변경 확인", f"모델을 {new_model.upper()}(으)로 변경하시겠습니까?\n변경 후 앱이 자동으로 재시작됩니다."):
-                    self.update_config_file(new_model)
+            if new_model != self.current_model_name:
+                if messagebox.askyesno("모델 변경 확인", f"모델을 {new_model.upper()}(으)로 변경하시겠습니까?"):
+                    self.switch_model(new_model)
             else:
                 messagebox.showinfo("알림", "현재 이미 선택되어 있는 모델입니다.")
 
         btn_confirm = tk.Button(popup, text="적용", command=on_confirm, font=("Arial", 10, "bold"), width=10, bg="lightgray")
         btn_confirm.pack(pady=10)
 
-    def update_config_file(self, new_model_name):
-        """config.py 파일을 읽어서 MODEL_NAME 설정을 변경하고 앱을 재시작"""
-        config_path = "config.py"
-        if not os.path.exists(config_path):
-            messagebox.showerror("오류", "config.py 파일을 찾을 수 없습니다.")
-            return
 
+    def switch_model(self, new_model_name):
+        self.center_status_label.config(text=f"⌛ {new_model_name.upper()} 로딩 중...", fg="orange")
+        self.update()
         try:
-            # 1. config.py 파일 읽기
-            with open(config_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-
-            # 2. MODEL_NAME이 선언된 줄을 찾아 치환
-            updated = False
-            for i, line in enumerate(lines):
-                # 주석이 아니고 MODEL_NAME 변수 설정 선언문인 경우 검색
-                if line.strip().startswith("MODEL_NAME") and "=" in line:
-                    lines[i] = f"MODEL_NAME = \"{new_model_name}\"\n"
-                    updated = True
-                    break
-            if not updated:
-                messagebox.showerror("오류", "config.py 내에서 MODEL_NAME 변수를 찾지 못했습니다.")
-                return
-
-            # 3. 변경 내용 반영하여 다시 쓰기
-            with open(config_path, "w", encoding="utf-8") as f:
-                f.writelines(lines)
-
-            # 4. 앱 프로세스 자동 재시작
-            import sys
-            import subprocess
-            messagebox.showinfo("재시작", "설정이 저장되었습니다. 앱을 재시작합니다.")
-            self.destroy() # 현재 tkinter 창을 완전히 닫음
-            
-            # 현재 실행 중인 파이썬 스크립트 파일 경로를 가져와 새 프로세스로 재실행
-            subprocess.Popen([sys.executable] + sys.argv)
-            sys.exit() # 현재 스크립트 프로세스 종료
-
+            self.embedder = Embedder(model_name=new_model_name, device=DEVICE)
         except Exception as e:
-            messagebox.showerror("오류", f"설정 변경 중 오류가 발생했습니다:\n{e}")
-    
+            messagebox.showerror("모델 로드 실패", f"{new_model_name.upper()} 모델을 불러올 수 없습니다.\n{e}")
+            self.center_status_label.config(text="❌ 모델 변경 실패", fg="red")
+            return
+        try:
+            base, ext = os.path.splitext(DB_PATH)
+            db_path = f"{base}_{new_model_name.lower()}{ext}"
+            if not os.path.exists(db_path):
+                self.center_status_label.config(text=f"⌛ {new_model_name.upper()} DB 생성 중...", fg="orange")
+                self.update()
+                self.db = self.build_db()
+            else:
+                with open(db_path, "rb") as f:
+                    self.db = pickle.load(f)
+                self.db = self.fix_db_dimensions(self.db)
+        except Exception as e:
+            messagebox.showerror("DB 로드 실패", f"임베딩 DB를 불러올 수 없습니다.\n{e}")
+            self.center_status_label.config(text="❌ DB 로드 실패", fg="red")
+            return
+        db_count = len(self.db) if self.db else 0
+        self.stat_label.config(text=f"DB: {db_count}개 이미지")
+        self.model_info_label.config(text=f"현재 모델: {new_model_name.upper()} ({DEVICE})")
+        self.center_status_label.config(text="✅ 모델 변경 완료!", fg="green")
+        self.current_model_name = new_model_name.lower()
 
     def get_current_db_path(self):
         """ DB명 처리: 현재 설정된 모델명에 맞춰 고유한 pkl 경로를 반환"""
