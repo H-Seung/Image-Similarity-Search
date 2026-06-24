@@ -199,8 +199,8 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         self.anomaly_model_var = tk.StringVar(value="ae")
         for val, lbl in (("ae", "AutoEncoder"), ("patchcore", "PatchCore")):
             tk.Radiobutton(left, text=lbl, variable=self.anomaly_model_var,
-                           value=val, font=("Arial", 10),
-                           bg="#f5f5f5").pack(side=tk.LEFT, padx=4)
+                           value=val, font=("Arial", 10), bg="#f5f5f5",
+                           command=self._on_anomaly_model_change).pack(side=tk.LEFT, padx=4)
 
         # 판정 결과
         self.lbl_anomaly_status = tk.Label(main_frame, text="⌛ 이미지 드롭 대기 중",
@@ -240,7 +240,26 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
         self.lbl_anomaly_heatmap_name.pack(pady=(3, 0))
 
 
+    def clear_similarity_display(self):
+        """초기화 메서드"""
+        self.canvas_query.delete("all")
+        self.lbl_query_name.config(text="")
+        self.canvas_best.delete("all")
+        self.lbl_best_name.config(text="")
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+
+    def clear_anomaly_display(self):
+        """초기화 메서드"""
+        self.canvas_anomaly_query.delete("all")
+        self.lbl_anomaly_query_name.config(text="")
+        self.canvas_anomaly_heatmap.delete("all")
+        self.lbl_anomaly_heatmap_name.config(text="")
+        self.lbl_anomaly_status.config(text="⌛ 이미지 드롭 대기 중", fg="gray")
+
+
     def switch_model(self, new_model_name):
+        self.clear_similarity_display()
         self.center_status_label.config(text=f"⌛ {new_model_name.upper()} 로딩 중...", fg="orange")
         self.update()
         try:
@@ -280,6 +299,24 @@ class ImageSearchApp(tkdnd.TkinterDnD.Tk):
             return
         self.switch_model(new_model)
         self.similarity_model_var.set(self.current_model_name)
+    
+    def _on_anomaly_model_change(self):
+        self.clear_anomaly_display()
+
+    def clear_similarity_display(self):
+        self.canvas_query.delete("all")
+        self.lbl_query_name.config(text="")
+        self.canvas_best.delete("all")
+        self.lbl_best_name.config(text="")
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+
+    def clear_anomaly_display(self):
+        self.canvas_anomaly_query.delete("all")
+        self.lbl_anomaly_query_name.config(text="")
+        self.canvas_anomaly_heatmap.delete("all")
+        self.lbl_anomaly_heatmap_name.config(text="")
+        self.lbl_anomaly_status.config(text="⌛ 이미지 드롭 대기 중", fg="gray")
 
 
     def get_current_db_path(self):
