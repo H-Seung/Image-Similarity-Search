@@ -1,9 +1,13 @@
 """
 PatchCore AUROC 정량 평가 및 시각화 (score 저장)
-사용법: python utils/patchcore_evaluate.py
+사용법: 
+python utils/pc_evaluate.py (전체)
+python utils/pc_evaluate.py --categories grid carpet (grid, carpet만)
 """
 import os
 import sys
+import argparse
+import csv
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
@@ -27,21 +31,21 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
 def evaluate_category(category, extractor):
+    """결함 유형별 score 수집 → {defect_type: [scores]} 반환."""
     memory_bank, feature_shape = load_memory_bank(category, MB_DIR)
     engine = PatchCoreInference(memory_bank, feature_shape)
 
     test_dir = os.path.join(DATA_DIR, category, "test")
     if not os.path.exists(test_dir):
-        return None, None
+        return {}
 
-    labels, scores = [], []
+    raw = {}
     for defect_type in sorted(os.listdir(test_dir)):
         defect_dir = os.path.join(test_dir, defect_type)
         if not os.path.isdir(defect_dir):
             continue
-        label = 0 if defect_type == "good" else 1
-
-        for fname in tqdm(os.listdir(defect_dir),
+        scores = []
+        for fname in tqdm(sorted(os.listdir(defect_dir)),
                           desc=f"  [{category}/{defect_type}]", leave=False):
             if not fname.lower().endswith(IMAGE_EXTS):
                 continue
@@ -50,12 +54,18 @@ def evaluate_category(category, extractor):
                 tensor = IMAGE_TRANSFORM(img).unsqueeze(0)
                 patch_features, _ = extractor.extract(tensor)
                 score, _ = engine.score(patch_features)
-                labels.append(label)
                 scores.append(score)
             except Exception as e:
                 print(f"  ⚠️  {fname}: {e}")
+        raw[defect_type] = scores
+    return raw
 
-    return np.array(labels), np.array(scores)
+
+def _aggregate(raw):
+    """raw → 카테고리 단위 (labels, scores) 집계."""
+    good = raw.get("good", [])
+    anomaly = [s for k, v in raw.items() if k != "good" for s in v]
+    return np.array([0]*len(good) + [1]*len(anomaly)), np.array(good + anomaly)
 
 
 # 시각화
@@ -103,19 +113,84 @@ def plot_roc_curves(all_data):
     print(f"저장: {out}")
 
 
+def plot_defect_auroc(all_raw, out_path):
+    cats = list(all_raw.keys())
+    fig, axes = plt.subplots(1, len(cats), figsize=(6 * len(cats), max(4, 0.5 * max(
+        len([k for k in raw if k != "good"]) for raw in all_raw.values()) + 2)))
+    if len(cats) == 1:
+        axes = [axes]
+
+    for ax, cat in zip(axes, cats):
+        raw = all_raw[cat]
+        good = raw.get("good", [])
+        defect_types = sorted(k for k in raw if k != "good")
+        aurocs = []
+        for dt in defect_types:
+            ds = raw[dt]
+            lbl = [0]*len(good) + [1]*len(ds)
+            aurocs.append(roc_auc_score(lbl, good + ds) if ds and len(set(lbl)) == 2 else 0.0)
+
+        colors = ['tomato' if a < 0.95 else 'steelblue' for a in aurocs]
+        ax.barh(defect_types, aurocs, color=colors)
+        ax.set_xlim(0.5, 1.05)
+        ax.axvline(x=0.95, color='gray', linestyle='--', linewidth=0.8)
+        ax.set_title(cat, fontsize=12)
+        ax.set_xlabel('AUROC')
+        for i, v in enumerate(aurocs):
+            ax.text(v + 0.003, i, f'{v:.4f}', va='center', fontsize=9)
+
+    plt.suptitle('Per-Defect AUROC', fontsize=13)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"저장: {out_path}")
+
+
+def save_defect_csv(all_raw, out_path):
+    with open(out_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['category', 'defect_type', 'auroc', 'n_samples'])
+        for cat, raw in all_raw.items():
+            good = raw.get("good", [])
+            labels, scores = _aggregate(raw)
+            if len(set(labels)) == 2:
+                writer.writerow([cat, 'ALL', f'{roc_auc_score(labels, scores):.4f}', len(scores) - len(good)])
+            for defect_type, defect_scores in sorted(raw.items()):
+                if defect_type == "good" or not defect_scores:
+                    continue
+                lbl = [0]*len(good) + [1]*len(defect_scores)
+                scr = good + defect_scores
+                if len(set(lbl)) == 2:
+                    writer.writerow([cat, defect_type, f'{roc_auc_score(lbl, scr):.4f}', len(defect_scores)])
+
+
 
 def main():
-    categories = get_available_categories()
-    print(f"카테고리: {categories}\n")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--categories', nargs='+', default=None, 
+                        metavar='CAT', help='Categories to evaluate(If not specified, applies to All)')
+    args = parser.parse_args()
+
+    available = get_available_categories()
+    categories = args.categories if args.categories else available
+    unknown = [c for c in categories if c not in available]
+    if unknown:
+        print(f"⚠️  Unknown category: {unknown} ")
+    categories = [c for c in categories if c in available]
+    print(f"Category: {categories}\n")
 
     extractor = PatchCoreFeatureExtractor(device='cpu')
-    results = {}
-    all_data = {}
+    results, all_raw, all_data = {}, {}, {}
 
     for cat in categories:
         print(f"[{cat}] 평가 중...")
-        labels, scores = evaluate_category(cat, extractor)
-        if labels is None or len(np.unique(labels)) < 2:
+        raw = evaluate_category(cat, extractor)
+        if not raw:
+            print(f"  ⚠️  스킵\n")
+            continue
+        labels, scores = _aggregate(raw)
+
+        if len(np.unique(labels)) < 2:
             print(f"  ⚠️  스킵\n")
             continue
 
@@ -130,6 +205,7 @@ def main():
             'best_f1':        f1[best_idx],
             'best_threshold': thresholds[best_idx],
         }
+        all_raw[cat]  = raw
         all_data[cat] = (labels, scores)
         print(f"  AUROC={auroc:.4f}  best_F1={f1[best_idx]:.4f}  "
               f"best_thresh={thresholds[best_idx]:.4f}\n")
@@ -143,13 +219,20 @@ def main():
     print("=" * 60)
     print(f"\n평균 AUROC: {np.mean([r['auroc'] for r in results.values()]):.4f}")
 
-    # 시각화
+    # 카테고리별 시각화
     plot_score_distributions(all_data)
     plot_roc_curves(all_data)
 
+    # 전체 (카테고리+결함별) auroc score 저장
+    csv_path = unique_path(os.path.join(RESULTS_DIR, 'defect_auroc.csv'))
+    save_defect_csv(all_raw, csv_path)
+
+    # 결함별 auroc 시각화
+    bar_path = unique_path(os.path.join(RESULTS_DIR, 'defect_auroc.png'))
+    plot_defect_auroc(all_raw, bar_path)
+
     # scores 저장
-    save_path = os.path.join(RESULTS_DIR, 'pc_scores.npz')
-    save_path = unique_path(save_path)
+    save_path = unique_path(os.path.join(RESULTS_DIR, 'pc_scores.npz'))
     np.savez(save_path,
              **{f'{cat}_labels': v[0] for cat, v in all_data.items()},
              **{f'{cat}_scores': v[1] for cat, v in all_data.items()})

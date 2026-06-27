@@ -1,0 +1,13 @@
+category,defect_type,auroc,n_samples
+grid,ALL,0.9599,57
+grid,bent,0.9960,12
+grid,broken,0.9960,12
+grid,glue,0.8658,11
+grid,metal_contamination,0.9957,11
+grid,thread,0.9394,11
+carpet,ALL,0.9984,89
+carpet,color,1.0000,19
+carpet,cut,1.0000,17
+carpet,hole,0.9979,17
+carpet,metal_contamination,0.9958,17
+carpet,thread,0.9981,19
